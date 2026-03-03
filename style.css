@@ -1,0 +1,269 @@
+/* Minimal cinematic motion + accessibility */
+:root {
+  --ease: cubic-bezier(.16, 1, .3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  filter: blur(6px);
+  transition: opacity 800ms var(--ease), transform 800ms var(--ease), filter 800ms var(--ease);
+  will-change: opacity, transform, filter;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+/* Cards (premium hover) */
+.card {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: 0;
+  transform: translateZ(0);
+  transition: transform 450ms var(--ease);
+  will-change: transform;
+}
+
+.card:hover {
+  transform: scale(1.03);
+}
+
+.card__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.01);
+  transition: transform 700ms var(--ease);
+  will-change: transform;
+}
+
+.card:hover .card__img {
+  transform: scale(1.06);
+}
+
+.card__shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0);
+  transition: background 450ms var(--ease);
+}
+
+.card:hover .card__shade {
+  background: rgba(0,0,0,.55);
+}
+
+.card__label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 450ms var(--ease);
+}
+
+.card:hover .card__label {
+  opacity: 1;
+}
+
+.card__text {
+  text-transform: uppercase;
+  color: white;
+  font-weight: 500;
+  letter-spacing: .04em;
+  font-size: clamp(1rem, 2vw, 1.5rem);
+}
+
+/* Vertical video container */
+.video-vertical {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  background: #000;
+}
+
+.video-vertical__el {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Marquee */
+.marquee {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.marquee__track {
+  display: flex;
+  width: max-content;
+  animation: marquee 130s linear infinite;
+  will-change: transform;
+}
+
+.marquee__content {
+  display: flex;
+  white-space: nowrap;
+}
+
+.marquee__text {
+  font-size: 28vw;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #EBF5EE;
+  padding: 0 2.5rem;
+  line-height: 1;
+}
+
+@media (min-width: 768px) {
+  .marquee__text {
+    font-size: 15vw;
+  }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Particles canvas */
+#particles canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.55;
+
+  /* Fade from bottom to top (particles disappear smoothly) */
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, black 45%, black 100%);
+  mask-image: linear-gradient(to top, transparent 0%, black 45%, black 100%);
+}
+
+/* Top-center cinematic glow */
+.glow-top {
+  position: fixed;
+  top: -220px;             
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, 120vw);
+  height: 720px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+  filter: blur(28px);
+  mix-blend-mode: screen;
+
+  background: radial-gradient(
+    circle at 50% 35%,
+    rgba(235, 245, 238, 0.22) 0%,
+    rgba(235, 245, 238, 0.12) 22%,
+    rgba(47, 93, 134, 0.10) 42%,
+    rgba(25, 27, 29, 0) 70%
+  );
+}
+
+@media (max-width: 640px) {
+  .glow-top {
+    top: -260px;
+    height: 640px;
+    filter: blur(24px);
+    opacity: 0.85;
+  }
+}
+
+/* Ensure content stays above glow */
+#nav,
+main {
+  z-index: 10;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .glow-top { display: none; }
+}
+
+:root {
+  --wipe: #2F5D86;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+}
+
+/* Subtle parallax targets */
+.parallax {
+  will-change: transform;
+  transform: translate3d(0,0,0);
+}
+
+:root {
+  --wipe: #2F5D86;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+}
+
+/* Title wipe reveal (cinematic) */
+.title-wipe {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide text until the wipe is covering it */
+.title-wipe {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 350ms var(--ease), transform 650ms var(--ease);
+}
+
+/* The blue rectangle */
+.title-wipe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--wipe);
+  transform: translateX(-110%);
+  transition: transform 950ms var(--ease);
+  will-change: transform;
+  z-index: 2;
+}
+
+/* Step 1: start wipe */
+.title-wipe.is-wiping {
+  opacity: 1;                 /* container becomes visible */
+  transform: translateY(0);
+}
+
+.title-wipe.is-wiping::after {
+  transform: translateX(0%);  /* rectangle covers text */
+}
+
+/* Step 2: reveal text while rectangle starts leaving */
+.title-wipe.is-revealed::after {
+  transform: translateX(110%); /* rectangle exits */
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .title-wipe { opacity: 1; transform: none; }
+  .title-wipe::after { display: none; }
+}
