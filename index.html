@@ -42,7 +42,7 @@
     </a>
 
     <div id="logoWrap" class="absolute top-0 left-1/2 -translate-x-1/2 will-change-transform">
-      <img id="logo" src="./assets/logo/logoForm.png" alt="Form Company" class="block select-none pointer-events-auto"
+      <img id="logo" src="./assets/logo/LogoForm.png" alt="Form Company" class="block select-none pointer-events-auto"
         style="width: 255px; height: 79px" />
     </div>
   </header>
@@ -120,9 +120,18 @@
             </div> <!-- Empty cell to preserve right column height -->
             <div class="hidden md:block md:col-start-2 md:row-start-3"></div>
           </div> <!-- Video -->
-          <div class="relative w-full aspect-[9/16] bg-black overflow-hidden"> <video
-              class="absolute inset-0 w-full h-full object-contain" src="assets/video/BarbaEmCasa.mp4" muted loop
-              playsinline preload="metadata"></video> </div> <!-- Instagram -->
+          <div class="relative w-full aspect-[9/16] bg-black overflow-hidden">
+            <video
+              id="localVideo"
+              class="absolute inset-0 w-full h-full object-contain"
+              src="https://res.cloudinary.com/dxc4lrixn/video/upload/v1772511990/BarbaEmCasa_zqrjng.mp4"
+              muted
+              loop
+              playsinline
+              preload="auto"
+            ></video>
+          </div>
+          <!-- Instagram -->
           <div class="flex flex-col mt-10 md:hidden">
             <h1 class="text-2xl uppercase mb-6">Nosso Perfil</h1>
             <div class="w-full h-[225px] overflow-hidden">

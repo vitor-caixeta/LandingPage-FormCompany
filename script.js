@@ -121,20 +121,37 @@
 
   // Local video play/pause when visible
   function initLocalVideo() {
-    if (!localVideo) return;
+  const localVideo = document.getElementById("localVideo");
+  if (!localVideo) return;
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) localVideo.play().catch(() => {});
-          else localVideo.pause();
-        });
-      },
-      { threshold: 0.6 }
-    );
+  // Helps some browsers allow autoplay once metadata is ready
+  const tryPlay = () => localVideo.play().catch(() => {});
 
-    io.observe(localVideo);
+  if (localVideo.readyState >= 2) {
+    tryPlay();
+  } else {
+    localVideo.addEventListener("loadedmetadata", tryPlay, { once: true });
   }
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          tryPlay();
+        } else {
+          localVideo.pause();
+        }
+      }
+    },
+    { threshold: 0.35 } // 0.6 can be too strict on mobile
+  );
+
+  io.observe(localVideo);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initLocalVideo();
+});
 
   updateNav();
   if (!prefersReduced) updateParallax();
