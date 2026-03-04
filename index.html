@@ -7,7 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css" />
   <script src="script.js" defer></script>
-  <title>Form Landing</title>
+  <link rel="icon" type="image/png" href="assets/logo/favicon.png">
+  <title>Form Company</title>
 </head>
 
 <body class="min-h-screen bg-[#191B1D] text-white">
@@ -56,15 +57,17 @@
             class="mx-auto w-[min(520px,92vw)] sm:w-[min(620px,86vw)] md:w-[min(760px,70vw)] h-auto" />
         </div>
 
-        <a href="https://wa.me/64993251835" class="mx-auto inline-flex items-center justify-center
-                 bg-[#EBF5EE] text-black
-                 px-5 py-3 sm:px-8 sm:py-4
-                 uppercase tracking-wide text-xs sm:text-sm font-medium
-                 rounded-none border border-[#EBF5EE]
-                 transition-all duration-300
-                 hover:bg-black hover:text-white
-                 focus:outline-none focus:ring-2 focus:ring-white/30
-                 reveal" data-reveal data-reveal-delay="120">
+        <a href="https://wa.me/64993251835"
+          class="cta-pulse mx-auto inline-flex items-center justify-center
+                bg-[#EBF5EE] text-black
+                px-5 py-3 sm:px-8 sm:py-4
+                uppercase tracking-wide text-xs sm:text-sm font-medium
+                rounded-none border border-[#EBF5EE]
+                transition-all duration-300
+                hover:bg-black hover:text-white
+                focus:outline-none focus:ring-2 focus:ring-white/30
+                reveal"
+          data-reveal data-reveal-delay="120">
           Vamos trabalhar juntos
         </a>
       </div>
@@ -83,7 +86,8 @@
             <!-- Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
           
-          <!-- Card 1 --> <a href="#" class="group relative overflow-hidden rounded-none block aspect-square transition-transform duration-300 hover:scale-[1.03]">
+          <!-- Card 1 --> 
+           <a href="https://www.behance.net/gallery/220679925/JOVENS-STRONG" class="group relative overflow-hidden rounded-none block aspect-square transition-transform duration-300 hover:scale-[1.03]">
             <img src="assets/images/coverStrong.png" alt="Strong"
               class="absolute inset-0 w-full h-full object-cover transition duration-300 group-hover:scale-[1.02]" />
             <div class="absolute inset-0 bg-black/0 transition duration-300 group-hover:bg-black/55"></div>
@@ -91,35 +95,41 @@
               class="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
               <span class="uppercase text-white text-xl md:text-2xl font-medium tracking-wide">Design de logos</span>
             </div>
-          </a> <!-- Card 2 --> <a href="#"
-            class="group relative overflow-hidden rounded-none block aspect-square transition-transform duration-300 hover:scale-[1.03]">
-            <img src="assets/images/coverAdv.jpg" alt="Adv"
-              class="absolute inset-0 w-full h-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+          </a> 
+
+          <!-- Card 2 --> 
+          <a href="https://photos.app.goo.gl/WEtTobVkjr8KeozX6" class="group relative overflow-hidden rounded-none block aspect-square transition-transform duration-300 hover:scale-[1.03]">
+            <img src="assets/images/coverAdv.jpg" alt="Adv" class="absolute inset-0 w-full h-full object-cover transition duration-300 group-hover:scale-[1.02]" />
             <div class="absolute inset-0 bg-black/0 transition duration-300 group-hover:bg-black/55"></div>
-            <div
-              class="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
+            <div class="absolute inset-0 flex flex-col items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100 text-center">
               <span class="uppercase text-white text-xl md:text-2xl font-medium tracking-wide">FOTOS CORPORATIVAS</span>
+              <p class="text-white text-xs mt-2 tracking-widest opacity-80">LAUDO NATEL</p>
             </div>
-          </a> <!-- Card 3 (under Strong) -->
-          <div class="flex-warp"> <a href="#"
-              class="group relative overflow-hidden rounded-none block aspect-square transition-transform duration-300 hover:scale-[1.03]">
-              <img src="assets/images/coverWedding.jpg" alt="Wedding"
-                class="absolute inset-0 w-full h-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+          </a>
+
+          <!-- Card 3 (under Strong) -->
+          <div class="flex-warp">
+            <a href="https://photos.app.goo.gl/Kt3XJiBRKyvxvX546" class="group relative overflow-hidden rounded-none block aspect-square transition-transform duration-300 hover:scale-[1.03]">
+              <img src="assets/images/coverWedding.jpg" alt="Wedding" class="absolute inset-0 w-full h-full object-cover transition duration-300 group-hover:scale-[1.02]" />
               <div class="absolute inset-0 bg-black/0 transition duration-300 group-hover:bg-black/55"></div>
-              <div
-                class="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
-                <span class="uppercase text-white text-xl md:text-2xl font-medium tracking-wide">FOTOS PARA
-                  CASAMENTOS</span> </div>
-            </a> <!-- Instagram -->
+              <div class="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
+                <span class="uppercase text-white text-xl md:text-2xl font-medium tracking-wide">FOTOS PARA CASAMENTOS</span>
+              </div>
+            </a> 
+            
+            <!-- Instagram -->
             <div class="flex flex-col mt-10 hidden md:block">
               <h1 class="text-2xl uppercase mb-6">Nosso Perfil</h1>
               <div class="w-full h-[225px] overflow-hidden">
                 <blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/formcompany_/"
                   data-instgrm-version="14" style="width:100%; margin:0;"></blockquote>
               </div>
-            </div> <!-- Empty cell to preserve right column height -->
+            </div> 
+            <!-- Empty cell to preserve right column height -->
             <div class="hidden md:block md:col-start-2 md:row-start-3"></div>
-          </div> <!-- Video -->
+          </div> 
+          
+          <!-- Video -->
           <div class="relative w-full aspect-[9/16] bg-black overflow-hidden">
             <video
               id="localVideo"
@@ -131,6 +141,7 @@
               preload="auto"
             ></video>
           </div>
+
           <!-- Instagram -->
           <div class="flex flex-col mt-10 md:hidden">
             <h1 class="text-2xl uppercase mb-6">Nosso Perfil</h1>
@@ -138,12 +149,14 @@
               <blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/formcompany_/"
                 data-instgrm-version="14" style="width:100%; margin:0;"></blockquote>
             </div>
-          </div> <!-- Placeholder (keeps the 3rd card under the left one on desktop) -->
+          </div> 
+          
+          <!-- Placeholder (keeps the 3rd card under the left one on desktop) -->
           <div class="hidden md:block"></div>
         </div>
-        <div class="mt-10 md:mt-0"> <a href="https://wa.me/64993251835"
-            class="mx-auto inline-flex items-center justify-center bg-[#EBF5EE] text-black px-5 py-3 sm:px-8 sm:py-4 uppercase tracking-wide text-xs sm:text-sm font-medium rounded-none border border-[#EBF5EE] transition-all duration-300 hover:bg-black hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30">
-            Vamos trabalhar juntos </a> </div>
+        <div class="mt-10 md:mt-0">
+          <a href="https://wa.me/64993251835" class="mx-auto inline-flex items-center justify-center bg-[#EBF5EE] text-black px-5 py-3 sm:px-8 sm:py-4 uppercase tracking-wide text-xs sm:text-sm font-medium rounded-none border border-[#EBF5EE] transition-all duration-300 hover:bg-black hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30">Comece a construir sua marca</a>
+        </div>
       </div>
     </section>
 
@@ -180,8 +193,25 @@
     <section class="py-32">
       <div class="max-w-4xl mx-auto px-4 sm:px-6 text-center">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-14 items-start">
-          <div class="w-full aspect-square bg-[#D9D9D9] flex items-center justify-center reveal" data-reveal>
-            <span class="uppercase text-black/80 tracking-widest text-lg font-medium">Foto</span>
+          <div class="relative w-full aspect-square overflow-hidden reveal group" data-reveal>
+            <img 
+              src="assets/images/Photo.jpg" 
+              alt="Photo"
+              class="w-full h-full object-cover transition duration-500 group-hover:scale-[1.03]"
+            >
+
+            <!-- Anderson (lado esquerdo) -->
+            <a href="https://instagram.com/_andersoncarlos" target="_blank"
+              class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full group-hover:translate-x-0 transition-all duration-400 bg-black/70 text-white px-4 py-2 text-sm tracking-wide">
+              @_andersoncarlos
+            </a>
+
+            <!-- Vitor (lado direito) -->
+            <a href="https://instagram.com/vitorcaixeta_" target="_blank"
+              class="absolute right-0 top-2/3 -translate-y-1/2 translate-x-full group-hover:translate-x-0 transition-all duration-400 bg-black/70 text-white px-4 py-2 text-sm tracking-wide">
+              @vitorcaixeta_
+            </a>
+
           </div>
 
           <div class="text-center md:text-start reveal" data-reveal data-reveal-delay="120">
@@ -208,7 +238,7 @@
     <!-- STUDIO -->
     <section class="bg-[#EAF3EC] py-10">
       <div class="max-w-6xl mx-auto px-4 sm:px-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div class="bg-[#D9D9D9] hidden md:flex aspect-[4/3] items-center justify-center reveal" data-reveal>
             <span class="uppercase text-black/80 text-xl font-medium">Fotos</span>
           </div>
@@ -220,9 +250,9 @@
             data-reveal-delay="160">
             <span class="uppercase text-black/80 text-xl font-medium">Fotos</span>
           </div>
-        </div>
+        </div> -->
 
-        <div class="max-w-4xl mx-auto text-center mt-10 reveal" data-reveal data-reveal-delay="120">
+        <div class="max-w-4xl mx-auto text-center m-10 reveal" data-reveal data-reveal-delay="120">
           <h2 class="uppercase font-extrabold text-4xl sm:text-5xl md:text-6xl text-black title-wipe" data-title>
             Nosso Estúdio
           </h2>
@@ -237,24 +267,25 @@
     </section>
 
     <!-- FINAL CTA -->
-    <section class="py-32 bg-[#191B1D] text-center">
-      <div class="max-w-4xl mx-auto px-4 sm:px-6">
-        <a href="https://wa.me/64993251835" class="inline-block bg-[#EAF3EC] text-black
-                 px-12 py-6 uppercase tracking-wide
-                 text-xl sm:text-2xl font-medium rounded-none
-                 transition-all duration-300 hover:bg-white hover:scale-[1.02]
-                 reveal" data-reveal>
-          Vamos trabalhar juntos
-        </a>
+   <section class="py-32 bg-[#191B1D] text-center">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6">
+    <a href="https://wa.me/64993251835"
+      class="cta-cinematic inline-block bg-[#EAF3EC] text-black
+             px-12 py-6 uppercase tracking-wide
+             text-xl sm:text-2xl font-medium rounded-none
+             transition-all duration-300 hover:bg-white
+             reveal" data-reveal>
+      Vamos trabalhar juntos
+    </a>
 
-        <div class="mt-16 reveal" data-reveal data-reveal-delay="120">
-          <a href="https://instagram.com/formcompany_" target="_blank"
-            class="text-2xl sm:text-3xl text-white/80 hover:text-white transition-colors duration-300">
-            @formcompany_
-          </a>
-        </div>
-      </div>
-    </section>
+    <div class="mt-16 reveal" data-reveal data-reveal-delay="120">
+      <a href="https://instagram.com/formcompany_" target="_blank"
+        class="shine-text text-2xl sm:text-3xl tracking-wide transition-colors duration-300">
+        @formcompany_
+      </a>
+    </div> 
+  </div>
+</section>
   </main>
 
   <script async src="https://www.instagram.com/embed.js"></script>

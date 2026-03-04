@@ -267,3 +267,46 @@ main {
   .title-wipe { opacity: 1; transform: none; }
   .title-wipe::after { display: none; }
 }
+
+.shine-text {
+  background: linear-gradient(
+    110deg,
+    #2F5D86 20%,
+    #2F5D86 35%,
+    #bfd8ee 45%,
+    #2F5D86 55%,
+    #2F5D86 70%
+  );
+  background-size: 200% auto;
+
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+
+  animation: shineMove 10s linear infinite;
+}
+
+@keyframes shineMove {
+  from {
+    background-position: -200% center;
+  }
+  to {
+    background-position: 200% center;
+  }
+}
+
+@keyframes subtlePulse {
+  0%, 100% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 rgba(235,245,238,1);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(235,245,238,0.35),
+                0 0 40px rgba(235,245,238,0.15);
+  }
+}
+
+.cta-pulse {
+  animation: subtlePulse 4.5s ease-in-out infinite;
+}
