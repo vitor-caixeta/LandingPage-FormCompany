@@ -143,6 +143,7 @@ body {
 .sidebar-user button svg { width: 17px; }
 .dashboard-content { min-width: 0; padding: clamp(28px, 4vw, 58px); }
 .dashboard-topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.dashboard-topbar-actions { display: flex; align-items: center; gap: 10px; }
 .dashboard-kicker { margin: 0 0 9px; color: #b50000; font-size: 9px; font-weight: 900; letter-spacing: .19em; text-transform: uppercase; }
 .dashboard-topbar h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(44px, 5vw, 72px); font-weight: 400; line-height: .9; letter-spacing: -.055em; }
 .dashboard-topbar p:last-child { margin: 14px 0 0; color: #716e68; font-size: 12px; }
@@ -243,9 +244,11 @@ body {
   .sidebar-link { width: 54px; min-height: 48px; }
   .dashboard-content { padding: 26px 16px; }
   .dashboard-topbar { align-items: flex-start; }
+  .dashboard-topbar-actions { margin-left: auto; }
   .dashboard-topbar h1 { font-size: 48px; }
   .dashboard-topbar p:last-child { display: none; }
   .dashboard-topbar .dashboard-button { width: 46px; padding: 0; font-size: 0; }
+  .dashboard-topbar-actions .dashboard-button.secondary { width: auto; padding: 0 12px; font-size: 8px; }
   .dashboard-topbar .plus { font-size: 23px; }
   .dashboard-stats { margin-top: 30px; grid-template-columns: 1fr; }
   .dashboard-stats article { min-height: 108px; }
