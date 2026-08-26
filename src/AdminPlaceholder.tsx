@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import FinanceDashboard from "./FinanceDashboard";
+import { readCloudData, writeCloudSection } from "./cloudStore";
 
 type Session = { access_token: string; user: { email?: string } };
 type Client = {
@@ -119,10 +120,26 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   const monthlyTotal = clients.reduce((sum, client) => sum + client.contractValue, 0);
   const monthlyVideos = clients.reduce((sum, client) => sum + (client.videoQuantity || 0), 0);
 
+  useEffect(() => {
+    let active = true;
+    void readCloudData(session.access_token).then((cloud) => {
+      if (!active) return;
+      if (cloud.clients?.length) {
+        const next = cloud.clients as Client[];
+        setClients(next);
+        localStorage.setItem(clientsKey, JSON.stringify(next));
+      } else {
+        const local = JSON.parse(localStorage.getItem(clientsKey) || "[]") as Client[];
+        if (local.length) void writeCloudSection(session.access_token, "clients", local);
+      }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [session.access_token]);
+
   function saveClient(client: Client) {
     const exists = clients.some((item) => item.id === client.id);
     const next = exists ? clients.map((item) => item.id === client.id ? client : item) : [client, ...clients];
-    setClients(next); localStorage.setItem(clientsKey, JSON.stringify(next)); setModalOpen(false); setEditingClient(null);
+    setClients(next); localStorage.setItem(clientsKey, JSON.stringify(next)); void writeCloudSection(session.access_token, "clients", next); setModalOpen(false); setEditingClient(null);
   }
 
   return <main className={`dashboard-page ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -136,7 +153,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
       <section className="clients-card"><div className="clients-toolbar"><div><h2>Todos os clientes</h2><span>{clients.length} {clients.length === 1 ? "cadastro" : "cadastros"}</span></div><label className="client-search"><Icon><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></Icon><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente..." /></label></div>
         {visibleClients.length ? <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>Contrato</th><th>Demanda</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><div className="client-cell"><span className="client-monogram">{client.name.charAt(0)}</span><div><strong>{client.tradeName || client.name}</strong>{client.tradeName && <small>{client.name}</small>}</div></div></td><td>{formatDocument(client.document)}</td><td><div className="contract-cell"><strong>{formatMoney(client.contractValue)}</strong>{client.contractName && <small>{client.contractName}</small>}</div></td><td><strong>{client.videoQuantity || 0} vídeos</strong></td><td>{formatPaymentDay(client)}</td><td><span className="status-pill"><i/> {client.status}</span></td><td><div className="row-actions"><button onClick={() => setSelectedClient(client)} aria-label={`Visualizar ${client.name}`} title="Visualizar"><Icon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon></button><button onClick={() => { setEditingClient(client); setModalOpen(true); }} aria-label={`Editar ${client.name}`} title="Editar"><Icon><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></Icon></button></div></td></tr>)}</tbody></table></div> : <div className="clients-empty"><span><Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></Icon></span><h3>{search ? "Nenhum cliente encontrado" : "Sua carteira começa aqui"}</h3><p>{search ? "Tente buscar por outro nome ou documento." : "Cadastre o primeiro cliente e acompanhe contratos e pagamentos em um só lugar."}</p>{!search && <button className="dashboard-button primary" onClick={() => setModalOpen(true)}>Cadastrar primeiro cliente</button>}</div>}
       </section>
-    </section> : <section className="dashboard-content finance-host"><FinanceDashboard /></section>}
+    </section> : <section className="dashboard-content finance-host"><FinanceDashboard accessToken={session.access_token} /></section>}
     {activeArea === "clients" && modalOpen && <ClientModal client={editingClient || undefined} onClose={() => { setModalOpen(false); setEditingClient(null); }} onSave={saveClient} />}
     {activeArea === "clients" && selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} onEdit={() => { setEditingClient(selectedClient); setSelectedClient(null); setModalOpen(true); }} />}
   </main>;
