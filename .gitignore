@@ -4,3 +4,13 @@
 
 # Vídeos
 *.mp4
+
+# Build e dependências
+node_modules/
+dist/
+
+# Variáveis locais
+.env
+.env.local
+.env.*.local
+!.env.example
