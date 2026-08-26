@@ -17,8 +17,10 @@ type Client = {
 
 const sessionKey = "form-admin-session";
 const clientsKey = "form-admin-clients";
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
+  || "https://xmjwdflvcusooinovgrg.supabase.co";
+const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
+  || "sb_publishable_3WQ418LpynVy6Olq5zWJ7w_ehTHoF9l";
 
 const onlyDigits = (value: string) => value.replace(/\D/g, "").slice(0, 14);
 const formatDocument = (value: string) => {
