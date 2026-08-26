@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 const reelLinks = [
-  "/videos/FinalExplosãoDC.mp4",
-  "/videos/CorrendoN1.mp4",
-  "/videos/FinalVideoForm.mp4",
-  "/videos/FinalVideoTrendsForm.mp4",
-  "/videos/VideoFinalClara.mp4",
+  "/videos/final-explosao-web.m4v",
+  "/videos/correndo-n1-web.m4v",
+  "/videos/final-form-web.m4v",
+  "/videos/trends-form-web.m4v",
+  "/videos/clara-web.m4v",
 ];
 
 const archiveItems = [
