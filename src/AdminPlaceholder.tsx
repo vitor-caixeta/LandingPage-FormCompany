@@ -16,8 +16,6 @@ type Client = {
   status: "Ativo" | "Pendente";
 };
 
-const sessionKey = "form-admin-session";
-const clientsKey = "form-admin-clients";
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
   || "https://xmjwdflvcusooinovgrg.supabase.co";
 const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
@@ -111,7 +109,7 @@ function ClientDetails({ client, onClose, onEdit }: { client: Client; onClose: (
 function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const [activeArea, setActiveArea] = useState<"clients" | "finance">("clients");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [clients, setClients] = useState<Client[]>(() => { try { return JSON.parse(localStorage.getItem(clientsKey) || "[]") as Client[]; } catch { return []; } });
+  const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -124,14 +122,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
     let active = true;
     void readCloudData(session.access_token).then((cloud) => {
       if (!active) return;
-      if (cloud.clients?.length) {
-        const next = cloud.clients as Client[];
-        setClients(next);
-        localStorage.setItem(clientsKey, JSON.stringify(next));
-      } else {
-        const local = JSON.parse(localStorage.getItem(clientsKey) || "[]") as Client[];
-        if (local.length) void writeCloudSection(session.access_token, "clients", local);
-      }
+      setClients((cloud.clients || []) as Client[]);
     }).catch(() => undefined);
     return () => { active = false; };
   }, [session.access_token]);
@@ -139,17 +130,13 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   function saveClient(client: Client) {
     const exists = clients.some((item) => item.id === client.id);
     const next = exists ? clients.map((item) => item.id === client.id ? client : item) : [client, ...clients];
-    setClients(next); localStorage.setItem(clientsKey, JSON.stringify(next)); void writeCloudSection(session.access_token, "clients", next); setModalOpen(false); setEditingClient(null);
+    setClients(next); void writeCloudSection(session.access_token, "clients", next); setModalOpen(false); setEditingClient(null);
   }
 
   async function syncAllData() {
     try {
-      const localAccounts = JSON.parse(localStorage.getItem("form-finance-accounts") || "[]") as unknown[];
-      const localEntries = JSON.parse(localStorage.getItem("form-finance-entries") || "[]") as unknown[];
       await writeCloudSection(session.access_token, "clients", clients);
-      await writeCloudSection(session.access_token, "accounts", localAccounts);
-      await writeCloudSection(session.access_token, "entries", localEntries);
-      window.alert(`Sincronização concluída: ${clients.length} clientes, ${localAccounts.length} contas e ${localEntries.length} lançamentos enviados.`);
+      window.alert(`Sincronização concluída: ${clients.length} clientes enviados.`);
     } catch (syncError) {
       window.alert(syncError instanceof Error ? syncError.message : "Não foi possível sincronizar os dados.");
     }
@@ -174,10 +161,10 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
 
 export default function AdminPlaceholder() {
   const [email, setEmail] = useState("admin@formcompany.com"); const [password, setPassword] = useState(""); const [showPassword, setShowPassword] = useState(false); const [isLoading, setIsLoading] = useState(false); const [error, setError] = useState("");
-  const [session, setSession] = useState<Session | null>(() => { try { const stored = localStorage.getItem(sessionKey); return stored ? JSON.parse(stored) as Session : null; } catch { return null; } });
+  const [session, setSession] = useState<Session | null>(null);
   useEffect(() => { document.title = "Área administrativa — Form Company"; }, []);
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); if (!supabaseUrl || !supabaseKey) { setError("A conexão com o sistema ainda não foi configurada."); return; } setIsLoading(true); try { const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: supabaseKey, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const data = await response.json() as Session & { error_description?: string; message?: string }; if (!response.ok) throw new Error(data.error_description || data.message || "Não foi possível entrar."); localStorage.setItem(sessionKey, JSON.stringify(data)); setSession(data); setPassword(""); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Não foi possível entrar. Tente novamente."); } finally { setIsLoading(false); } }
-  function signOut() { localStorage.removeItem(sessionKey); setSession(null); }
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); if (!supabaseUrl || !supabaseKey) { setError("A conexão com o sistema ainda não foi configurada."); return; } setIsLoading(true); try { const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: supabaseKey, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const data = await response.json() as Session & { error_description?: string; message?: string }; if (!response.ok) throw new Error(data.error_description || data.message || "Não foi possível entrar."); setSession(data); setPassword(""); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Não foi possível entrar. Tente novamente."); } finally { setIsLoading(false); } }
+  function signOut() { setSession(null); }
   if (session) return <Dashboard session={session} onSignOut={signOut} />;
   return <main className="admin-page"><div className="admin-frame"><section className="admin-panel"><FormMark /><form className="admin-form" onSubmit={handleSubmit}><div><p className="admin-eyebrow">Área administrativa</p><h1>Bem-vindo de volta.</h1><p className="admin-copy">Entre com seu e-mail para acessar a Form.</p></div><label className="admin-field"><span>E-mail</span><input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" required /></label><label className="admin-field"><span>Senha</span><span className="admin-password-wrap"><input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Digite sua senha" required /><button type="button" className="admin-password-toggle" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Ocultar" : "Mostrar"}</button></span></label>{error && <p className="admin-error" role="alert">{error}</p>}<button className="admin-primary-button" type="submit" disabled={isLoading}><span>{isLoading ? "Entrando..." : "Entrar"}</span><span>↗</span></button></form><p className="admin-footer-note">Form Company® · Acesso restrito</p></section><aside className="admin-art-copy" aria-hidden="true"><span>Forma.</span><span>Movimento.</span><span>Resultado.</span></aside></div></main>;
 }

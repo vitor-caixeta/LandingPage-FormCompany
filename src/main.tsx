@@ -5,6 +5,10 @@ import App from "./App";
 import AdminPlaceholder from "./AdminPlaceholder";
 import "./index.css";
 
+// Remove dados persistidos por versões anteriores. O app mantém dados somente
+// no Supabase e a sessão atual apenas na memória.
+window.localStorage.clear();
+
 function PageLoader() {
   const [isVisible, setIsVisible] = useState(true);
 
