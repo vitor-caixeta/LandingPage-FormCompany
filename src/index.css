@@ -176,9 +176,16 @@ body {
 .client-monogram { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #ded8cc; color: #b50000; font-family: Georgia, serif; font-size: 14px; }
 .status-pill { padding: 6px 9px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: #e2ece2; color: #426546; font-size: 8px; font-weight: 800; }
 .status-pill i { width: 5px; height: 5px; border-radius: 50%; background: #4c8854; }
+.status-pill.inactive { background: #e7e3dc; color: #77716a; }
+.status-pill.inactive i { background: #928b82; }
+.clients-toolbar-controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.client-status-filter { height: 38px; padding: 0 10px; display: flex; align-items: center; gap: 7px; border: 1px solid #ddd8ce; border-radius: 8px; background: #fff; }
+.client-status-filter span { margin: 0 !important; color: #918d86; font-size: 8px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.client-status-filter select { border: 0; outline: 0; background: transparent; color: #514d48; font: inherit; font-size: 10px; cursor: pointer; }
 .row-actions { display: flex; align-items: center; gap: 6px; }
 .row-actions button { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border: 1px solid #ddd8cf; border-radius: 8px; background: #fff; color: #77726b; cursor: pointer; transition: .2s; }
 .row-actions button:hover { border-color: #b50000; color: #b50000; transform: translateY(-1px); }
+.row-actions .status-action:hover { border-color: #67615a; color: #393531; }
 .row-actions svg { width: 15px; height: 15px; }
 .clients-empty { min-height: 310px; padding: 50px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .clients-empty > span { width: 52px; height: 52px; margin-bottom: 18px; display: grid; place-items: center; border-radius: 50%; background: #eee9df; color: #b50000; }
@@ -253,6 +260,8 @@ body {
   .dashboard-stats { margin-top: 30px; grid-template-columns: 1fr; }
   .dashboard-stats article { min-height: 108px; }
   .clients-toolbar { align-items: flex-start; flex-direction: column; }
+  .clients-toolbar-controls { width: 100%; align-items: stretch; flex-direction: column; }
+  .client-status-filter { justify-content: space-between; }
   .client-search { width: 100%; }
   .client-modal-backdrop { padding: 8px; align-items: end; }
   .client-modal { max-height: calc(100svh - 16px); border-radius: 18px 18px 10px 10px; }

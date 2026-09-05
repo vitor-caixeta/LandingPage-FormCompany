@@ -13,7 +13,7 @@ type Client = {
   paymentDay: string;
   paymentDate?: string;
   contractName?: string;
-  status: "Ativo" | "Pendente";
+  status: "Ativo" | "Inativo";
 };
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
@@ -111,18 +111,24 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"Todos" | Client["status"]>("Todos");
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const visibleClients = useMemo(() => clients.filter((client) => `${client.name} ${client.tradeName} ${client.document}`.toLowerCase().includes(search.toLowerCase())), [clients, search]);
-  const monthlyTotal = clients.reduce((sum, client) => sum + client.contractValue, 0);
-  const monthlyVideos = clients.reduce((sum, client) => sum + (client.videoQuantity || 0), 0);
+  const activeClients = useMemo(() => clients.filter((client) => client.status !== "Inativo"), [clients]);
+  const visibleClients = useMemo(() => clients.filter((client) => {
+    const matchesSearch = `${client.name} ${client.tradeName} ${client.document}`.toLowerCase().includes(search.toLowerCase());
+    const normalizedStatus = client.status === "Inativo" ? "Inativo" : "Ativo";
+    return matchesSearch && (statusFilter === "Todos" || normalizedStatus === statusFilter);
+  }), [clients, search, statusFilter]);
+  const monthlyTotal = activeClients.reduce((sum, client) => sum + client.contractValue, 0);
+  const monthlyVideos = activeClients.reduce((sum, client) => sum + (client.videoQuantity || 0), 0);
 
   useEffect(() => {
     let active = true;
     void readCloudData(session.access_token).then((cloud) => {
       if (!active) return;
-      setClients((cloud.clients || []) as Client[]);
+      setClients(((cloud.clients || []) as Client[]).map((client) => ({ ...client, status: client.status === "Inativo" ? "Inativo" : "Ativo" })));
     }).catch(() => undefined);
     return () => { active = false; };
   }, [session.access_token]);
@@ -131,6 +137,13 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
     const exists = clients.some((item) => item.id === client.id);
     const next = exists ? clients.map((item) => item.id === client.id ? client : item) : [client, ...clients];
     setClients(next); void writeCloudSection(session.access_token, "clients", next); setModalOpen(false); setEditingClient(null);
+  }
+
+  function toggleClientStatus(client: Client) {
+    const status: Client["status"] = client.status === "Inativo" ? "Ativo" : "Inativo";
+    const next = clients.map((item) => item.id === client.id ? { ...item, status } : item);
+    setClients(next);
+    void writeCloudSection(session.access_token, "clients", next);
   }
 
   async function syncAllData() {
@@ -149,9 +162,9 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
       <button className="sidebar-link"><Icon><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1v.09h-4V21a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4h-.09v-4H3A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1v-.09h4V3a1.7 1.7 0 0 0 1.1 1.6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.6 1 .27.28.62.4 1 .4h.09v4H21c-.4 0-.73.13-1 .4-.27.28-.48.62-.6 1Z"/></Icon><span>Configurações</span></button>
     </nav><div className="sidebar-user"><span className="user-avatar">A</span><div><strong>Administrador</strong><small>{session.user.email}</small></div><button onClick={onSignOut} aria-label="Sair"><Icon><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></Icon></button></div></aside>
     {activeArea === "clients" ? <section className="dashboard-content"><header className="dashboard-topbar"><div><p className="dashboard-kicker">Área administrativa</p><h1>Clientes</h1><p>Gerencie os contratos e pagamentos da Form.</p></div><div className="dashboard-topbar-actions"><button className="dashboard-button secondary" onClick={syncAllData}>Sincronizar agora</button><button className="dashboard-button primary" onClick={() => setModalOpen(true)}><span className="plus">+</span> Novo cliente</button></div></header>
-      <div className="dashboard-stats"><article><span>Clientes ativos</span><strong>{String(clients.length).padStart(2, "0")}</strong><small>Base atual</small></article><article><span>Valor em contratos</span><strong>{formatMoney(monthlyTotal)}</strong><small>Total cadastrado</small></article><article><span>Vídeos mensais</span><strong>{String(monthlyVideos).padStart(2, "0")}</strong><small>Demanda total</small></article><article><span>Próximo pagamento</span><strong>{clients.length ? formatPaymentDay([...clients].sort((a,b) => Number(getPaymentDay(a)) - Number(getPaymentDay(b)))[0]) : "—"}</strong><small>Agenda financeira</small></article></div>
-      <section className="clients-card"><div className="clients-toolbar"><div><h2>Todos os clientes</h2><span>{clients.length} {clients.length === 1 ? "cadastro" : "cadastros"}</span></div><label className="client-search"><Icon><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></Icon><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente..." /></label></div>
-        {visibleClients.length ? <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>Contrato</th><th>Demanda</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><div className="client-cell"><span className="client-monogram">{client.name.charAt(0)}</span><div><strong>{client.tradeName || client.name}</strong>{client.tradeName && <small>{client.name}</small>}</div></div></td><td>{formatDocument(client.document)}</td><td><div className="contract-cell"><strong>{formatMoney(client.contractValue)}</strong>{client.contractName && <small>{client.contractName}</small>}</div></td><td><strong>{client.videoQuantity || 0} vídeos</strong></td><td>{formatPaymentDay(client)}</td><td><span className="status-pill"><i/> {client.status}</span></td><td><div className="row-actions"><button onClick={() => setSelectedClient(client)} aria-label={`Visualizar ${client.name}`} title="Visualizar"><Icon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon></button><button onClick={() => { setEditingClient(client); setModalOpen(true); }} aria-label={`Editar ${client.name}`} title="Editar"><Icon><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></Icon></button></div></td></tr>)}</tbody></table></div> : <div className="clients-empty"><span><Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></Icon></span><h3>{search ? "Nenhum cliente encontrado" : "Sua carteira começa aqui"}</h3><p>{search ? "Tente buscar por outro nome ou documento." : "Cadastre o primeiro cliente e acompanhe contratos e pagamentos em um só lugar."}</p>{!search && <button className="dashboard-button primary" onClick={() => setModalOpen(true)}>Cadastrar primeiro cliente</button>}</div>}
+      <div className="dashboard-stats"><article><span>Clientes ativos</span><strong>{String(activeClients.length).padStart(2, "0")}</strong><small>{clients.length - activeClients.length} inativos</small></article><article><span>Valor em contratos</span><strong>{formatMoney(monthlyTotal)}</strong><small>Contratos ativos</small></article><article><span>Vídeos mensais</span><strong>{String(monthlyVideos).padStart(2, "0")}</strong><small>Demanda ativa</small></article><article><span>Próximo pagamento</span><strong>{activeClients.length ? formatPaymentDay([...activeClients].sort((a,b) => Number(getPaymentDay(a)) - Number(getPaymentDay(b)))[0]) : "—"}</strong><small>Agenda financeira</small></article></div>
+      <section className="clients-card"><div className="clients-toolbar"><div><h2>Clientes</h2><span>{visibleClients.length} de {clients.length} {clients.length === 1 ? "cadastro" : "cadastros"}</span></div><div className="clients-toolbar-controls"><label className="client-status-filter"><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select></label><label className="client-search"><Icon><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></Icon><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente..." /></label></div></div>
+        {visibleClients.length ? <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>Contrato</th><th>Demanda</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><div className="client-cell"><span className="client-monogram">{client.name.charAt(0)}</span><div><strong>{client.tradeName || client.name}</strong>{client.tradeName && <small>{client.name}</small>}</div></div></td><td>{formatDocument(client.document)}</td><td><div className="contract-cell"><strong>{formatMoney(client.contractValue)}</strong>{client.contractName && <small>{client.contractName}</small>}</div></td><td><strong>{client.videoQuantity || 0} vídeos</strong></td><td>{formatPaymentDay(client)}</td><td><span className={`status-pill ${client.status === "Inativo" ? "inactive" : ""}`}><i/> {client.status === "Inativo" ? "Inativo" : "Ativo"}</span></td><td><div className="row-actions"><button onClick={() => setSelectedClient(client)} aria-label={`Visualizar ${client.name}`} title="Visualizar"><Icon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon></button><button onClick={() => { setEditingClient(client); setModalOpen(true); }} aria-label={`Editar ${client.name}`} title="Editar"><Icon><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></Icon></button><button className="status-action" onClick={() => toggleClientStatus(client)} aria-label={`${client.status === "Inativo" ? "Ativar" : "Inativar"} ${client.name}`} title={client.status === "Inativo" ? "Ativar cliente" : "Inativar cliente"}><Icon><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></Icon></button></div></td></tr>)}</tbody></table></div> : <div className="clients-empty"><span><Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></Icon></span><h3>{search || statusFilter !== "Todos" ? "Nenhum cliente encontrado" : "Sua carteira começa aqui"}</h3><p>{search || statusFilter !== "Todos" ? "Ajuste a busca ou o filtro de status." : "Cadastre o primeiro cliente e acompanhe contratos e pagamentos em um só lugar."}</p>{!search && statusFilter === "Todos" && <button className="dashboard-button primary" onClick={() => setModalOpen(true)}>Cadastrar primeiro cliente</button>}</div>}
       </section>
     </section> : <section className="dashboard-content finance-host"><FinanceDashboard accessToken={session.access_token} /></section>}
     {activeArea === "clients" && modalOpen && <ClientModal client={editingClient || undefined} onClose={() => { setModalOpen(false); setEditingClient(null); }} onSave={saveClient} />}
