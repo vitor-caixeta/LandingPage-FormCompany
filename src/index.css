@@ -1957,6 +1957,16 @@ footer {
 .bulk-toolbar > button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 7px; background: #292727; color: #fff; cursor: pointer; font-size: 8px; font-weight: 900; text-transform: uppercase; }
 .bulk-toolbar > button:disabled { opacity: .35; cursor: not-allowed; }
 .bulk-toolbar > .bulk-delete-button { border: 1px solid rgba(181, 0, 0, .22); background: transparent; color: #b50000; }
+.transaction-totals { padding: 18px; display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #dedad1; background: #f4f1ea; }
+.transaction-totals > div { min-width: 160px; padding: 13px 16px; display: grid; gap: 7px; border: 1px solid #ded9d0; border-radius: 9px; background: #fff; }
+.transaction-totals > div.balance { background: #292727; border-color: #292727; }
+.transaction-totals span { color: #8e8981; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.transaction-totals strong { font-family: Georgia, serif; font-size: 20px; font-weight: 400; }
+.transaction-totals strong.income { color: #477d4e; }
+.transaction-totals strong.expense { color: #b50000; }
+.transaction-totals .balance span { color: #aaa49c; }
+.transaction-totals .balance strong.income { color: #8fc496; }
+.transaction-totals .balance strong.expense { color: #ef8f82; }
 .transaction-date-tools { display: flex; align-items: center; gap: 8px; }
 .transaction-date-tools > select { width: 170px; height: 38px; font-size: 9px; }
 .finance-table-wrap th:first-child, .finance-table-wrap td:first-child { width: 38px; padding-inline: 11px; text-align: center; }
@@ -1967,6 +1977,9 @@ footer {
 .entry-view-button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border: 1px solid #d7d2c9; border-radius: 7px; background: #fff; color: #625e58; cursor: pointer; }
 .entry-view-button:hover { border-color: #b50000; color: #b50000; }
 .entry-view-button svg { width: 15px; height: 15px; }
+.entry-delete-button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border: 1px solid rgba(181, 0, 0, .2); border-radius: 7px; background: #fff; color: #a64b43; cursor: pointer; }
+.entry-delete-button:hover { border-color: #b50000; background: #fff4f2; color: #b50000; }
+.entry-delete-button svg { width: 14px; height: 14px; }
 .entry-value-breakdown { margin: 22px 27px 0; display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
 .entry-value-breakdown > div { min-height: 82px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #ddd8cf; border-radius: 10px; background: #fff; }
 .entry-value-breakdown > div:last-child { border-color: #b50000; background: #f8e9e7; }
@@ -1992,4 +2005,6 @@ footer {
   .bulk-toolbar select { width: 100%; }
   .bulk-toolbar > span { margin-left: 0; }
   .bulk-toolbar > button { margin-left: auto; }
+  .transaction-totals { align-items: stretch; flex-direction: column; }
+  .transaction-totals > div { min-width: 0; }
 }
