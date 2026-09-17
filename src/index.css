@@ -159,6 +159,13 @@ body {
 .dashboard-stats strong { margin: auto 0 8px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(24px, 2.5vw, 38px); font-weight: 400; letter-spacing: -.045em; }
 .dashboard-stats small { color: #a19d96; font-size: 9px; }
 .clients-card { overflow: hidden; border: 1px solid #d9d4ca; border-radius: 16px; background: #f8f6f0; }
+.client-kind-tabs { padding: 10px; display: flex; gap: 6px; border-bottom: 1px solid #dedad1; background: #ebe7df; }
+.client-kind-tabs button { min-height: 38px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 0; border-radius: 10px; background: transparent; color: #77716b; cursor: pointer; font: inherit; font-size: 10px; font-weight: 800; }
+.client-kind-tabs button b { min-width: 21px; padding: 4px 6px; border-radius: 999px; background: #dad4ca; font-size: 8px; }
+.client-kind-tabs button.active { background: #fff; color: #292624; box-shadow: 0 5px 16px #31261b10; }
+.client-kind-tabs button.active b { background: #b50000; color: #fff; }
+.client-kind-badge { padding: 6px 9px; border-radius: 999px; background: #eaded9; color: #8f3933; font-size: 8px; font-weight: 900; text-transform: uppercase; }
+.client-kind-badge.pontual { background: #dde5ea; color: #416171; }
 .clients-toolbar { min-height: 82px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #dedad1; }
 .clients-toolbar h2 { display: inline; margin: 0; font-size: 14px; }
 .clients-toolbar div > span { margin-left: 10px; color: #9a968e; font-size: 9px; }
@@ -200,10 +207,16 @@ body {
 .client-modal-header p:last-child { margin: 9px 0 0; color: #8a867f; font-size: 10px; }
 .modal-close { width: 36px; height: 36px; border: 1px solid #dbd6cc; border-radius: 50%; background: transparent; color: #625e58; cursor: pointer; font-size: 23px; line-height: 1; }
 .client-form { padding: 26px 30px 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.client-kind-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.client-kind-picker button { min-height: 78px; padding: 15px; display: grid; gap: 5px; border: 1px solid #d8d3c9; border-radius: 12px; background: #fff; color: #5f5a54; cursor: pointer; text-align: left; }
+.client-kind-picker button strong { font-size: 11px; }
+.client-kind-picker button span { color: #969087; font-size: 8px; }
+.client-kind-picker button.active { border-color: #b50000; background: #b5000008; box-shadow: 0 0 0 3px #b5000010; }
+.client-kind-picker button.active strong { color: #b50000; }
 .dashboard-field { display: grid; gap: 8px; }
 .dashboard-field.full, .contract-upload.full, .client-form-actions.full { grid-column: 1 / -1; }
 .dashboard-field > span:first-child { color: #69655f; font-size: 9px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
-.dashboard-field input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid #d8d3c9; border-radius: 8px; outline: 0; background: #fff; color: #2c2927; font: inherit; font-size: 11px; transition: .2s; }
+.dashboard-field input, .dashboard-field select { width: 100%; height: 48px; padding: 0 14px; border: 1px solid #d8d3c9; border-radius: 8px; outline: 0; background: #fff; color: #2c2927; font: inherit; font-size: 11px; transition: .2s; }
 .dashboard-field input:focus { border-color: #b50000; box-shadow: 0 0 0 3px #b5000012; }
 .document-input { position: relative; }
 .document-input input { padding-right: 125px; }
@@ -227,10 +240,22 @@ body {
 .client-details-grid span { color: #928e86; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .client-details-grid strong { color: #302d2a; font-size: 12px; }
 .client-details-actions { padding: 0 30px 30px; display: flex; justify-content: flex-end; gap: 10px; }
+.portal-admin-setup { margin-top: 36px; padding: clamp(30px,5vw,64px); border: 1px solid #d8d1c7; border-radius: 24px; background: #f8f5ee; }
+.portal-admin-setup span { color: #b50000; font-size: 9px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.portal-admin-setup h2 { margin: 12px 0; font: 400 clamp(32px,4vw,54px) Georgia,serif; }
+.portal-admin-setup p { color: #77716a; font-size: 12px; }
+.portal-admin-setup code { display: inline-block; margin-top: 12px; padding: 12px; border-radius: 9px; background: #211e1e; color: #fff; font-size: 10px; }
+.portal-admin-grid { padding: 16px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.portal-admin-grid article { min-height: 190px; padding: 20px; display: flex; flex-direction: column; border: 1px solid #ded8ce; border-radius: 16px; background: #fff; }
+.portal-admin-grid article>div { display: flex; justify-content: space-between; color: #918b84; font-size: 8px; text-transform: uppercase; }
+.portal-admin-grid h3 { margin: auto 0 8px; font: 400 25px Georgia,serif; }
+.portal-admin-grid p { margin: 0 0 18px; color: #8e8881; font-size: 10px; }
+.portal-admin-grid a { color: #b50000; font-size: 9px; font-weight: 900; text-transform: uppercase; }
 @keyframes modal-fade { from { opacity: 0; } }
 @keyframes modal-rise { from { opacity: 0; transform: translateY(22px) scale(.98); } }
 
 @media (max-width: 840px) {
+  .portal-admin-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .dashboard-page { grid-template-columns: 78px 1fr; }
   .dashboard-sidebar { padding: 28px 12px 18px; }
   .dashboard-sidebar .admin-brand { width: 50px; margin: 0 auto 45px; overflow: hidden; }
@@ -242,6 +267,10 @@ body {
 }
 
 @media (max-width: 600px) {
+  .portal-admin-grid { grid-template-columns: 1fr; }
+  .client-kind-tabs { overflow-x: auto; }
+  .client-kind-tabs button { flex: none; }
+  .client-kind-picker { grid-template-columns: 1fr; }
   .sidebar-collapse-button { display: none; }
   .dashboard-page.sidebar-collapsed { display: block; padding-bottom: 74px; }
   .dashboard-page { display: block; padding-bottom: 74px; }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import FinanceDashboard from "./FinanceDashboard";
-import { readCloudData, writeCloudSection } from "./cloudStore";
+import PortalAdmin from "./PortalAdmin";
+import { cloudDataFromUser, readCloudData, writeCloudSection, type CloudData, type CloudUser } from "./cloudStore";
 
-type Session = { access_token: string; user: { email?: string } };
+type Session = { access_token: string; refresh_token?: string; user: { email?: string } & CloudUser };
 type Client = {
   id: string;
   document: string;
@@ -14,6 +15,8 @@ type Client = {
   paymentDate?: string;
   contractName?: string;
   status: "Ativo" | "Inativo";
+  kind?: "Recorrente" | "Pontual";
+  portalUsername?: string;
 };
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
@@ -36,6 +39,10 @@ const formatMoneyInput = (value: string) => {
 const parseMoneyInput = (value: string) => Number(value.replace(/\./g, "").replace(",", "."));
 const getPaymentDay = (client: Client) => client.paymentDay || client.paymentDate?.split("-")[2] || "";
 const formatPaymentDay = (client: Client) => getPaymentDay(client) ? `Dia ${Number(getPaymentDay(client))}` : "—";
+const normalizeClients = (cloud: CloudData) => ((cloud.clients || []) as Client[]).map((client) => ({
+  ...client,
+  status: client.status === "Inativo" ? "Inativo" as const : "Ativo" as const,
+}));
 
 function Icon({ children }: { children: ReactNode }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -53,6 +60,8 @@ function ClientModal({ onClose, onSave, client }: { onClose: () => void; onSave:
   const [videoQuantity, setVideoQuantity] = useState(String(client?.videoQuantity || ""));
   const [paymentDay, setPaymentDay] = useState(client ? getPaymentDay(client) : "");
   const [contract, setContract] = useState<File | null>(null);
+  const [kind, setKind] = useState<"Recorrente" | "Pontual">(client?.kind || "Recorrente");
+  const [portalUsername, setPortalUsername] = useState(client?.portalUsername || "");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const digits = onlyDigits(document);
   const isCnpj = digits.length > 11;
@@ -81,7 +90,7 @@ function ClientModal({ onClose, onSave, client }: { onClose: () => void; onSave:
     onSave({
       id: client?.id || crypto.randomUUID(), document: digits, name, tradeName,
       contractValue: parseMoneyInput(contractValue), videoQuantity: Number(videoQuantity), paymentDay,
-      contractName: contract?.name || client?.contractName, status: client?.status || "Ativo",
+      contractName: contract?.name || client?.contractName, status: client?.status || "Ativo", kind, portalUsername,
     });
   }
 
@@ -89,9 +98,11 @@ function ClientModal({ onClose, onSave, client }: { onClose: () => void; onSave:
     <section className="client-modal" role="dialog" aria-modal="true" aria-labelledby="new-client-title">
       <header className="client-modal-header"><div><p className="dashboard-kicker">{client ? "Editar cadastro" : "Novo cadastro"}</p><h2 id="new-client-title">{client ? "Editar cliente" : "Adicionar cliente"}</h2><p>Preencha os dados comerciais e anexe o contrato.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Fechar">×</button></header>
       <form className="client-form" onSubmit={submit}>
+        <div className="client-kind-picker full"><button type="button" className={kind==="Recorrente"?"active":""} onClick={()=>setKind("Recorrente")}><strong>Recorrente</strong><span>Contrato contínuo, portal e relatórios</span></button><button type="button" className={kind==="Pontual"?"active":""} onClick={()=>setKind("Pontual")}><strong>Pontual</strong><span>Projeto único, fotos e vídeos</span></button></div>
         <label className="dashboard-field full"><span>CPF ou CNPJ</span><div className="document-input"><input value={formatDocument(document)} onChange={(event) => { setDocument(event.target.value); setLookupStatus("idle"); }} onBlur={lookupCnpj} inputMode="numeric" placeholder="00.000.000/0000-00" required /><span className={`lookup-status ${lookupStatus}`}>{lookupStatus === "loading" ? "Consultando..." : lookupStatus === "success" ? "Dados encontrados" : lookupStatus === "error" ? "Não encontrado" : isCnpj ? "CNPJ" : "CPF"}</span></div></label>
         <label className="dashboard-field full"><span>Nome {isCnpj ? "ou razão social" : "completo"}</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome do cliente" required /></label>
         {isCnpj && <label className="dashboard-field full"><span>Nome fantasia</span><input value={tradeName} onChange={(event) => setTradeName(event.target.value)} placeholder="Nome fantasia" /></label>}
+        <label className="dashboard-field full"><span>Usuário do portal</span><input value={portalUsername} onChange={event=>setPortalUsername(event.target.value.toLowerCase().replace(/[^a-z0-9._-]/g,""))} placeholder="Ex.: claramartinez" minLength={3}/></label>
         <label className="dashboard-field"><span>Valor do contrato</span><div className="money-input"><b>R$</b><input value={contractValue} onChange={(event) => setContractValue(event.target.value.replace(/[^\d,.]/g, ""))} onBlur={() => setContractValue(formatMoneyInput(contractValue))} inputMode="decimal" placeholder="0,00" required /></div></label>
         <label className="dashboard-field"><span>Quantidade de vídeos</span><input type="number" min="1" value={videoQuantity} onChange={(event) => setVideoQuantity(event.target.value)} inputMode="numeric" placeholder="Ex.: 8" required /></label>
         <label className="dashboard-field"><span>Dia do pagamento</span><input type="number" min="1" max="31" value={paymentDay} onChange={(event) => setPaymentDay(event.target.value)} inputMode="numeric" placeholder="Ex.: 10" required /></label>
@@ -107,11 +118,14 @@ function ClientDetails({ client, onClose, onEdit }: { client: Client; onClose: (
 }
 
 function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
-  const [activeArea, setActiveArea] = useState<"clients" | "finance">("clients");
+  const sessionCloud = cloudDataFromUser(session.user);
+  const [activeArea, setActiveArea] = useState<"clients" | "portal" | "finance">("clients");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<Client[]>(() => normalizeClients(sessionCloud));
+  const [cloudData, setCloudData] = useState<CloudData>(sessionCloud);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Client["status"]>("Todos");
+  const [kindFilter, setKindFilter] = useState<"Todos" | "Recorrente" | "Pontual">("Todos");
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -119,18 +133,16 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   const visibleClients = useMemo(() => clients.filter((client) => {
     const matchesSearch = `${client.name} ${client.tradeName} ${client.document}`.toLowerCase().includes(search.toLowerCase());
     const normalizedStatus = client.status === "Inativo" ? "Inativo" : "Ativo";
-    return matchesSearch && (statusFilter === "Todos" || normalizedStatus === statusFilter);
-  }), [clients, search, statusFilter]);
+    return matchesSearch && (statusFilter === "Todos" || normalizedStatus === statusFilter) && (kindFilter === "Todos" || (client.kind || "Recorrente") === kindFilter);
+  }), [clients, search, statusFilter, kindFilter]);
   const monthlyTotal = activeClients.reduce((sum, client) => sum + client.contractValue, 0);
   const monthlyVideos = activeClients.reduce((sum, client) => sum + (client.videoQuantity || 0), 0);
 
   useEffect(() => {
-    let active = true;
-    void readCloudData(session.access_token).then((cloud) => {
-      if (!active) return;
-      setClients(((cloud.clients || []) as Client[]).map((client) => ({ ...client, status: client.status === "Inativo" ? "Inativo" : "Ativo" })));
-    }).catch(() => undefined);
-    return () => { active = false; };
+    void readCloudData(session.access_token).then((data) => {
+      setCloudData(data);
+      setClients(normalizeClients(data));
+    }).catch((reason) => console.error("Falha ao carregar dados administrativos", reason));
   }, [session.access_token]);
 
   function saveClient(client: Client) {
@@ -158,15 +170,16 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   return <main className={`dashboard-page ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
     <aside className="dashboard-sidebar"><button className="sidebar-collapse-button" type="button" onClick={() => setSidebarCollapsed((value) => !value)} aria-label={sidebarCollapsed ? "Abrir menu principal" : "Fechar menu principal"} title={sidebarCollapsed ? "Abrir menu" : "Fechar menu"}><Icon><path d={sidebarCollapsed ? "m9 18 6-6-6-6" : "m15 18-6-6 6-6"}/></Icon></button><FormMark /><nav aria-label="Menu administrativo">
       <button className={`sidebar-link ${activeArea === "clients" ? "active" : ""}`} onClick={() => setActiveArea("clients")}><Icon><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></Icon><span>Clientes</span></button>
+      <button className={`sidebar-link ${activeArea === "portal" ? "active" : ""}`} onClick={() => setActiveArea("portal")}><Icon><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 9 5 3-5 3Z"/></Icon><span>Conteúdo</span></button>
       <button className={`sidebar-link ${activeArea === "finance" ? "active" : ""}`} onClick={() => setActiveArea("finance")}><Icon><path d="M4 19V9m8 10V5m8 14v-7"/></Icon><span>Financeiro</span></button>
       <button className="sidebar-link"><Icon><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1v.09h-4V21a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4h-.09v-4H3A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1v-.09h4V3a1.7 1.7 0 0 0 1.1 1.6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.6 1 .27.28.62.4 1 .4h.09v4H21c-.4 0-.73.13-1 .4-.27.28-.48.62-.6 1Z"/></Icon><span>Configurações</span></button>
     </nav><div className="sidebar-user"><span className="user-avatar">A</span><div><strong>Administrador</strong><small>{session.user.email}</small></div><button onClick={onSignOut} aria-label="Sair"><Icon><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></Icon></button></div></aside>
     {activeArea === "clients" ? <section className="dashboard-content"><header className="dashboard-topbar"><div><p className="dashboard-kicker">Área administrativa</p><h1>Clientes</h1><p>Gerencie os contratos e pagamentos da Form.</p></div><div className="dashboard-topbar-actions"><button className="dashboard-button secondary" onClick={syncAllData}>Sincronizar agora</button><button className="dashboard-button primary" onClick={() => setModalOpen(true)}><span className="plus">+</span> Novo cliente</button></div></header>
       <div className="dashboard-stats"><article><span>Clientes ativos</span><strong>{String(activeClients.length).padStart(2, "0")}</strong><small>{clients.length - activeClients.length} inativos</small></article><article><span>Valor em contratos</span><strong>{formatMoney(monthlyTotal)}</strong><small>Contratos ativos</small></article><article><span>Vídeos mensais</span><strong>{String(monthlyVideos).padStart(2, "0")}</strong><small>Demanda ativa</small></article><article><span>Próximo pagamento</span><strong>{activeClients.length ? formatPaymentDay([...activeClients].sort((a,b) => Number(getPaymentDay(a)) - Number(getPaymentDay(b)))[0]) : "—"}</strong><small>Agenda financeira</small></article></div>
-      <section className="clients-card"><div className="clients-toolbar"><div><h2>Clientes</h2><span>{visibleClients.length} de {clients.length} {clients.length === 1 ? "cadastro" : "cadastros"}</span></div><div className="clients-toolbar-controls"><label className="client-status-filter"><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select></label><label className="client-search"><Icon><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></Icon><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente..." /></label></div></div>
-        {visibleClients.length ? <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>Contrato</th><th>Demanda</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><div className="client-cell"><span className="client-monogram">{client.name.charAt(0)}</span><div><strong>{client.tradeName || client.name}</strong>{client.tradeName && <small>{client.name}</small>}</div></div></td><td>{formatDocument(client.document)}</td><td><div className="contract-cell"><strong>{formatMoney(client.contractValue)}</strong>{client.contractName && <small>{client.contractName}</small>}</div></td><td><strong>{client.videoQuantity || 0} vídeos</strong></td><td>{formatPaymentDay(client)}</td><td><span className={`status-pill ${client.status === "Inativo" ? "inactive" : ""}`}><i/> {client.status === "Inativo" ? "Inativo" : "Ativo"}</span></td><td><div className="row-actions"><button onClick={() => setSelectedClient(client)} aria-label={`Visualizar ${client.name}`} title="Visualizar"><Icon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon></button><button onClick={() => { setEditingClient(client); setModalOpen(true); }} aria-label={`Editar ${client.name}`} title="Editar"><Icon><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></Icon></button><button className="status-action" onClick={() => toggleClientStatus(client)} aria-label={`${client.status === "Inativo" ? "Ativar" : "Inativar"} ${client.name}`} title={client.status === "Inativo" ? "Ativar cliente" : "Inativar cliente"}><Icon><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></Icon></button></div></td></tr>)}</tbody></table></div> : <div className="clients-empty"><span><Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></Icon></span><h3>{search || statusFilter !== "Todos" ? "Nenhum cliente encontrado" : "Sua carteira começa aqui"}</h3><p>{search || statusFilter !== "Todos" ? "Ajuste a busca ou o filtro de status." : "Cadastre o primeiro cliente e acompanhe contratos e pagamentos em um só lugar."}</p>{!search && statusFilter === "Todos" && <button className="dashboard-button primary" onClick={() => setModalOpen(true)}>Cadastrar primeiro cliente</button>}</div>}
+      <section className="clients-card"><div className="client-kind-tabs"><button className={kindFilter==="Todos"?"active":""} onClick={()=>setKindFilter("Todos")}>Todos <b>{clients.length}</b></button><button className={kindFilter==="Recorrente"?"active":""} onClick={()=>setKindFilter("Recorrente")}>Recorrentes <b>{clients.filter(c=>(c.kind||"Recorrente")==="Recorrente").length}</b></button><button className={kindFilter==="Pontual"?"active":""} onClick={()=>setKindFilter("Pontual")}>Pontuais <b>{clients.filter(c=>c.kind==="Pontual").length}</b></button></div><div className="clients-toolbar"><div><h2>Clientes</h2><span>{visibleClients.length} de {clients.length} {clients.length === 1 ? "cadastro" : "cadastros"}</span></div><div className="clients-toolbar-controls"><label className="client-status-filter"><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select></label><label className="client-search"><Icon><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></Icon><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente..." /></label></div></div>
+        {visibleClients.length ? <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Cliente</th><th>Tipo</th><th>CPF/CNPJ</th><th>Contrato</th><th>Demanda</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><div className="client-cell"><span className="client-monogram">{client.name.charAt(0)}</span><div><strong>{client.tradeName || client.name}</strong>{client.tradeName && <small>{client.name}</small>}</div></div></td><td><span className={`client-kind-badge ${(client.kind||"Recorrente").toLowerCase()}`}>{client.kind||"Recorrente"}</span></td><td>{formatDocument(client.document)}</td><td><div className="contract-cell"><strong>{formatMoney(client.contractValue)}</strong>{client.contractName && <small>{client.contractName}</small>}</div></td><td><strong>{client.videoQuantity || 0} vídeos</strong></td><td>{formatPaymentDay(client)}</td><td><span className={`status-pill ${client.status === "Inativo" ? "inactive" : ""}`}><i/> {client.status === "Inativo" ? "Inativo" : "Ativo"}</span></td><td><div className="row-actions"><button onClick={() => setSelectedClient(client)} aria-label={`Visualizar ${client.name}`} title="Visualizar"><Icon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon></button><button onClick={() => { setEditingClient(client); setModalOpen(true); }} aria-label={`Editar ${client.name}`} title="Editar"><Icon><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></Icon></button><button className="status-action" onClick={() => toggleClientStatus(client)} aria-label={`${client.status === "Inativo" ? "Ativar" : "Inativar"} ${client.name}`} title={client.status === "Inativo" ? "Ativar cliente" : "Inativar cliente"}><Icon><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></Icon></button></div></td></tr>)}</tbody></table></div> : <div className="clients-empty"><span><Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></Icon></span><h3>Nenhum cliente encontrado</h3><p>Ajuste a busca ou os filtros.</p></div>}
       </section>
-    </section> : <section className="dashboard-content finance-host"><FinanceDashboard accessToken={session.access_token} /></section>}
+    </section> : activeArea === "portal" ? <section className="dashboard-content"><PortalAdmin accessToken={session.access_token}/></section> : <section className="dashboard-content finance-host"><FinanceDashboard accessToken={session.access_token} initialCloudData={cloudData} /></section>}
     {activeArea === "clients" && modalOpen && <ClientModal client={editingClient || undefined} onClose={() => { setModalOpen(false); setEditingClient(null); }} onSave={saveClient} />}
     {activeArea === "clients" && selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} onEdit={() => { setEditingClient(selectedClient); setSelectedClient(null); setModalOpen(true); }} />}
   </main>;
@@ -176,6 +189,23 @@ export default function AdminPlaceholder() {
   const [email, setEmail] = useState("admin@formcompany.com"); const [password, setPassword] = useState(""); const [showPassword, setShowPassword] = useState(false); const [isLoading, setIsLoading] = useState(false); const [error, setError] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => { document.title = "Área administrativa — Form Company"; }, []);
+  useEffect(() => {
+    if (!session?.refresh_token || session.access_token.length < 8000) return;
+    let active = true;
+    void fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { apikey: supabaseKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    }).then(async (response) => {
+      const refreshed = await response.json() as Session & { error_description?: string; message?: string };
+      if (!response.ok) throw new Error(refreshed.error_description || refreshed.message || "Não foi possível renovar a sessão.");
+      if (active) setSession(refreshed);
+    }).catch((reason) => {
+      console.error("Falha ao renovar a sessão administrativa", reason);
+      if (active) setSession(null);
+    });
+    return () => { active = false; };
+  }, [session]);
   async function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); if (!supabaseUrl || !supabaseKey) { setError("A conexão com o sistema ainda não foi configurada."); return; } setIsLoading(true); try { const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: supabaseKey, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const data = await response.json() as Session & { error_description?: string; message?: string }; if (!response.ok) throw new Error(data.error_description || data.message || "Não foi possível entrar."); setSession(data); setPassword(""); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Não foi possível entrar. Tente novamente."); } finally { setIsLoading(false); } }
   function signOut() { setSession(null); }
   if (session) return <Dashboard session={session} onSignOut={signOut} />;

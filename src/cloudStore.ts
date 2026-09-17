@@ -4,6 +4,14 @@ export type CloudData = {
   entries?: unknown[];
 };
 
+export type CloudUser = {
+  user_metadata?: { form_data?: CloudData };
+};
+
+export function cloudDataFromUser(user?: CloudUser): CloudData {
+  return user?.user_metadata?.form_data || {};
+}
+
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
   || "https://xmjwdflvcusooinovgrg.supabase.co";
 const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
@@ -16,21 +24,20 @@ const headers = (accessToken: string) => ({
 });
 
 export async function readCloudData(accessToken: string): Promise<CloudData> {
-  const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: headers(accessToken) });
+  const response = await fetch(`${supabaseUrl}/rest/v1/app_data?select=section,value`, { headers: headers(accessToken) });
   if (!response.ok) throw new Error("Não foi possível carregar os dados da nuvem.");
-  const user = await response.json() as { user_metadata?: { form_data?: CloudData } };
-  return user.user_metadata?.form_data || {};
+  const rows = await response.json() as { section: keyof CloudData; value: unknown[] }[];
+  return Object.fromEntries(rows.map((row) => [row.section, row.value])) as CloudData;
 }
 
 let writeQueue: Promise<void> = Promise.resolve();
 
 export function writeCloudSection(accessToken: string, section: keyof CloudData, value: unknown[]) {
   writeQueue = writeQueue.catch(() => undefined).then(async () => {
-    const current = await readCloudData(accessToken);
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      method: "PUT",
-      headers: headers(accessToken),
-      body: JSON.stringify({ data: { form_data: { ...current, [section]: value } } }),
+    const response = await fetch(`${supabaseUrl}/rest/v1/app_data?on_conflict=section`, {
+      method: "POST",
+      headers: { ...headers(accessToken), Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify([{ section, value }]),
     });
     if (!response.ok) throw new Error("Não foi possível salvar os dados na nuvem.");
   });

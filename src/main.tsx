@@ -3,11 +3,9 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import App from "./App";
 import AdminPlaceholder from "./AdminPlaceholder";
+import ClientPortal from "./ClientPortal";
+import PublicShare from "./PublicShare";
 import "./index.css";
-
-// Remove dados persistidos por versões anteriores. O app mantém dados somente
-// no Supabase e a sessão atual apenas na memória.
-window.localStorage.clear();
 
 function PageLoader() {
   const [isVisible, setIsVisible] = useState(true);
@@ -39,6 +37,8 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/" element={<App />} />
         <Route path="/adim" element={<AdminPlaceholder />} />
         <Route path="/admin" element={<AdminPlaceholder />} />
+        <Route path="/clientes" element={<ClientPortal />} />
+        <Route path="/compartilhar/:token" element={<PublicShare />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
