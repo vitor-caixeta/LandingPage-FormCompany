@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { getClientSession, instagramEmbed, loadPortal, loginClient, saveClientSession, youtubeId, type ClientSession, type PortalClient, type PortalMedia, type PortalProject } from "./clientPortalStore";
+import { clientSessionNeedsRefresh, getClientSession, instagramEmbed, loadPortal, loginClient, refreshClientSession, saveClientSession, youtubeId, type ClientSession, type PortalClient, type PortalMedia, type PortalProject } from "./clientPortalStore";
 import "./clientPortal.css";
 import "./clientPortalOverrides.css";
 
@@ -20,7 +20,7 @@ function PhotoGrid({items}:{items:PortalMedia[]}){return <div className="portal-
 
 function Portal({session,onExit}:{session:ClientSession;onExit:()=>void}){
   const [tab,setTab]=useState<Tab>("home");const [client,setClient]=useState<PortalClient|null>(null);const [projects,setProjects]=useState<PortalProject[]>([]);const [media,setMedia]=useState<PortalMedia[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState("");
-  useEffect(()=>{void loadPortal(session.access_token).then(data=>{setClient(data.client);setProjects(data.projects);setMedia(data.media)}).catch(reason=>setError(reason instanceof Error?reason.message:"Falha ao carregar.")).finally(()=>setLoading(false))},[session.access_token]);
+  useEffect(()=>{let active=true;setLoading(true);setError("");void loadPortal(session.access_token).then(data=>{if(!active)return;setClient(data.client);setProjects(data.projects);setMedia(data.media)}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:"Falha ao carregar.")}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[session.access_token]);
   const videos=media.filter(x=>x.kind==="video"),photos=media.filter(x=>x.kind==="photo");
   const totals=useMemo(()=>media.flatMap(x=>x.media_metrics||[]).reduce((sum,row)=>({views:sum.views+row.views,reach:sum.reach+row.reach,likes:sum.likes+row.likes}),{views:0,reach:0,likes:0}),[media]);
   if(loading)return <main className="portal-loading"><img src="/LogoForm.png" alt=""/><span>Preparando seu portal…</span></main>;
@@ -37,4 +37,41 @@ function Portal({session,onExit}:{session:ClientSession;onExit:()=>void}){
   </main>
 }
 function Empty({label}:{label:string}){return <div className="portal-empty"><span>✦</span><p>{label}</p></div>}
-export default function ClientPortal(){const [session,setSession]=useState<ClientSession|null>(()=>getClientSession());return session?<Portal session={session} onExit={()=>{saveClientSession(null);setSession(null)}}/>:<Login onLogin={setSession}/>}
+export default function ClientPortal(){
+  const [session,setSession]=useState<ClientSession|null|undefined>(undefined);
+
+  useEffect(()=>{
+    let active=true;
+    const syncSession=()=>{if(active)setSession(getClientSession())};
+    window.addEventListener("storage",syncSession);
+    const stored=getClientSession();
+    if(!stored){setSession(null);return()=>{active=false;window.removeEventListener("storage",syncSession)}}
+    if(!clientSessionNeedsRefresh(stored)){setSession(stored)}
+    else void refreshClientSession(stored).then(refreshed=>{if(active)setSession(refreshed)}).catch(()=>{if(active)setSession(stored)});
+    return()=>{active=false;window.removeEventListener("storage",syncSession)};
+  },[]);
+
+  useEffect(()=>{
+    if(!session)return;
+    let active=true;
+    let refreshing=false;
+    const signOut=()=>{saveClientSession(null);if(active)setSession(null)};
+    const remaining=session.persistent_until-Date.now();
+    if(remaining<=0){signOut();return}
+    const expiryTimer=window.setTimeout(signOut,remaining);
+    const renewIfNeeded=async()=>{
+      if(!active||refreshing||!clientSessionNeedsRefresh(session))return;
+      refreshing=true;
+      try{const refreshed=await refreshClientSession(session);if(active)setSession(refreshed)}
+      catch(reason){console.error("Falha ao renovar a sessão do cliente",reason)}
+      finally{refreshing=false}
+    };
+    void renewIfNeeded();
+    const refreshTimer=window.setInterval(()=>{void renewIfNeeded()},30_000);
+    return()=>{active=false;window.clearTimeout(expiryTimer);window.clearInterval(refreshTimer)};
+  },[session?.access_token,session?.expires_at,session?.persistent_until,session?.refresh_token]);
+
+  const exit=()=>{saveClientSession(null);setSession(null)};
+  if(session===undefined)return <main className="portal-loading"><img src="/LogoForm.png" alt=""/><span>Restaurando sua sessão…</span></main>;
+  return session?<Portal session={session} onExit={exit}/>:<Login onLogin={setSession}/>;
+}

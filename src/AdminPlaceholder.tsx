@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import FinanceDashboard from "./FinanceDashboard";
 import PortalAdmin from "./PortalAdmin";
 import { cloudDataFromUser, readCloudData, writeCloudSection, type CloudData, type CloudUser } from "./cloudStore";
 
-type Session = { access_token: string; refresh_token?: string; user: { email?: string } & CloudUser };
+type Session = { access_token: string; refresh_token?: string; expires_at?: number; persistent_until: number; user: { email?: string } & CloudUser };
 type Client = {
   id: string;
   document: string;
   name: string;
   tradeName?: string;
-  contractValue: number;
-  videoQuantity: number;
-  paymentDay: string;
+  contractValue?: number;
+  videoQuantity?: number;
+  paymentDay?: string;
   paymentDate?: string;
   contractName?: string;
   status: "Ativo" | "Inativo";
@@ -23,6 +23,45 @@ const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
   || "https://xmjwdflvcusooinovgrg.supabase.co";
 const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)
   || "sb_publishable_3WQ418LpynVy6Olq5zWJ7w_ehTHoF9l";
+const adminSessionKey = "form_admin_session";
+const adminSessionDuration = 24 * 60 * 60 * 1000;
+
+function saveAdminSession(session: Session | null) {
+  try {
+    if (session) localStorage.setItem(adminSessionKey, JSON.stringify(session));
+    else localStorage.removeItem(adminSessionKey);
+  } catch { /* armazenamento indisponível */ }
+}
+
+function getAdminSession(): Session | null {
+  try {
+    const stored = localStorage.getItem(adminSessionKey);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<Session>;
+    if (!parsed.access_token || !parsed.user) throw new Error("Sessão inválida");
+    const session = { ...parsed, persistent_until: parsed.persistent_until || Date.now() + adminSessionDuration } as Session;
+    if (session.persistent_until <= Date.now()) {
+      saveAdminSession(null);
+      return null;
+    }
+    if (!parsed.persistent_until) saveAdminSession(session);
+    return session;
+  } catch {
+    saveAdminSession(null);
+    return null;
+  }
+}
+
+async function refreshAdminSession(refreshToken: string, persistentUntil: number): Promise<Session> {
+  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: { apikey: supabaseKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  const refreshed = await response.json() as Omit<Session, "persistent_until"> & { error_description?: string; message?: string };
+  if (!response.ok) throw new Error(refreshed.error_description || refreshed.message || "Não foi possível renovar a sessão.");
+  return { ...refreshed, persistent_until: persistentUntil };
+}
 
 const onlyDigits = (value: string) => value.replace(/\D/g, "").slice(0, 14);
 const formatDocument = (value: string) => {
@@ -39,6 +78,7 @@ const formatMoneyInput = (value: string) => {
 const parseMoneyInput = (value: string) => Number(value.replace(/\./g, "").replace(",", "."));
 const getPaymentDay = (client: Client) => client.paymentDay || client.paymentDate?.split("-")[2] || "";
 const formatPaymentDay = (client: Client) => getPaymentDay(client) ? `Dia ${Number(getPaymentDay(client))}` : "—";
+const isRecurringClient = (client: Client) => (client.kind || "Recorrente") === "Recorrente";
 const normalizeClients = (cloud: CloudData) => ((cloud.clients || []) as Client[]).map((client) => ({
   ...client,
   status: client.status === "Inativo" ? "Inativo" as const : "Ativo" as const,
@@ -52,25 +92,27 @@ function FormMark() {
   return <a className="admin-brand" href="/" aria-label="Voltar para o site da Form"><img src="/LogoForm.png" alt="Form Company" /></a>;
 }
 
-function ClientModal({ onClose, onSave, client }: { onClose: () => void; onSave: (client: Client) => void; client?: Client }) {
+function ClientModal({ onClose, onSave, client }: { onClose: () => void; onSave: (client: Client) => Promise<void>; client?: Client }) {
   const [document, setDocument] = useState(client?.document || "");
   const [name, setName] = useState(client?.name || "");
   const [tradeName, setTradeName] = useState(client?.tradeName || "");
-  const [contractValue, setContractValue] = useState(client ? formatMoneyInput(String(client.contractValue).replace(".", ",")) : "");
+  const [contractValue, setContractValue] = useState(client?.contractValue != null ? formatMoneyInput(String(client.contractValue).replace(".", ",")) : "");
   const [videoQuantity, setVideoQuantity] = useState(String(client?.videoQuantity || ""));
   const [paymentDay, setPaymentDay] = useState(client ? getPaymentDay(client) : "");
   const [contract, setContract] = useState<File | null>(null);
   const [kind, setKind] = useState<"Recorrente" | "Pontual">(client?.kind || "Recorrente");
   const [portalUsername, setPortalUsername] = useState(client?.portalUsername || "");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const digits = onlyDigits(document);
   const isCnpj = digits.length > 11;
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const onKey = (event: KeyboardEvent) => { if (!saving && event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, saving]);
 
   async function lookupCnpj() {
     if (digits.length !== 14) return;
@@ -85,44 +127,61 @@ function ClientModal({ onClose, onSave, client }: { onClose: () => void; onSave:
     } catch { setLookupStatus("error"); }
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave({
+    const savedClient: Client = {
       id: client?.id || crypto.randomUUID(), document: digits, name, tradeName,
-      contractValue: parseMoneyInput(contractValue), videoQuantity: Number(videoQuantity), paymentDay,
       contractName: contract?.name || client?.contractName, status: client?.status || "Ativo", kind, portalUsername,
-    });
+    };
+    if (kind === "Recorrente") {
+      savedClient.contractValue = parseMoneyInput(contractValue);
+      savedClient.videoQuantity = Number(videoQuantity);
+      savedClient.paymentDay = paymentDay;
+    }
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(savedClient);
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : "Não foi possível salvar o cliente.");
+      setSaving(false);
+    }
   }
 
-  return <div className="client-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="client-modal-backdrop" role="presentation" onMouseDown={(event) => { if (!saving && event.target === event.currentTarget) onClose(); }}>
     <section className="client-modal" role="dialog" aria-modal="true" aria-labelledby="new-client-title">
-      <header className="client-modal-header"><div><p className="dashboard-kicker">{client ? "Editar cadastro" : "Novo cadastro"}</p><h2 id="new-client-title">{client ? "Editar cliente" : "Adicionar cliente"}</h2><p>Preencha os dados comerciais e anexe o contrato.</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Fechar">×</button></header>
+      <header className="client-modal-header"><div><p className="dashboard-kicker">{client ? "Editar cadastro" : "Novo cadastro"}</p><h2 id="new-client-title">{client ? "Editar cliente" : "Adicionar cliente"}</h2><p>{kind === "Recorrente" ? "Preencha os dados cadastrais e comerciais do cliente." : "Preencha somente os dados cadastrais do cliente."}</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Fechar" disabled={saving}>×</button></header>
       <form className="client-form" onSubmit={submit}>
-        <div className="client-kind-picker full"><button type="button" className={kind==="Recorrente"?"active":""} onClick={()=>setKind("Recorrente")}><strong>Recorrente</strong><span>Contrato contínuo, portal e relatórios</span></button><button type="button" className={kind==="Pontual"?"active":""} onClick={()=>setKind("Pontual")}><strong>Pontual</strong><span>Projeto único, fotos e vídeos</span></button></div>
+        <div className="client-kind-picker full" role="group" aria-label="Tipo de cliente"><button type="button" className={kind==="Recorrente"?"active":""} aria-pressed={kind === "Recorrente"} onClick={()=>setKind("Recorrente")}><strong>Recorrente</strong><span>Contrato contínuo, portal e relatórios</span></button><button type="button" className={kind==="Pontual"?"active":""} aria-pressed={kind === "Pontual"} onClick={()=>setKind("Pontual")}><strong>Pontual</strong><span>Projeto único, fotos e vídeos</span></button></div>
         <label className="dashboard-field full"><span>CPF ou CNPJ</span><div className="document-input"><input value={formatDocument(document)} onChange={(event) => { setDocument(event.target.value); setLookupStatus("idle"); }} onBlur={lookupCnpj} inputMode="numeric" placeholder="00.000.000/0000-00" required /><span className={`lookup-status ${lookupStatus}`}>{lookupStatus === "loading" ? "Consultando..." : lookupStatus === "success" ? "Dados encontrados" : lookupStatus === "error" ? "Não encontrado" : isCnpj ? "CNPJ" : "CPF"}</span></div></label>
         <label className="dashboard-field full"><span>Nome {isCnpj ? "ou razão social" : "completo"}</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome do cliente" required /></label>
         {isCnpj && <label className="dashboard-field full"><span>Nome fantasia</span><input value={tradeName} onChange={(event) => setTradeName(event.target.value)} placeholder="Nome fantasia" /></label>}
         <label className="dashboard-field full"><span>Usuário do portal</span><input value={portalUsername} onChange={event=>setPortalUsername(event.target.value.toLowerCase().replace(/[^a-z0-9._-]/g,""))} placeholder="Ex.: claramartinez" minLength={3}/></label>
-        <label className="dashboard-field"><span>Valor do contrato</span><div className="money-input"><b>R$</b><input value={contractValue} onChange={(event) => setContractValue(event.target.value.replace(/[^\d,.]/g, ""))} onBlur={() => setContractValue(formatMoneyInput(contractValue))} inputMode="decimal" placeholder="0,00" required /></div></label>
-        <label className="dashboard-field"><span>Quantidade de vídeos</span><input type="number" min="1" value={videoQuantity} onChange={(event) => setVideoQuantity(event.target.value)} inputMode="numeric" placeholder="Ex.: 8" required /></label>
-        <label className="dashboard-field"><span>Dia do pagamento</span><input type="number" min="1" max="31" value={paymentDay} onChange={(event) => setPaymentDay(event.target.value)} inputMode="numeric" placeholder="Ex.: 10" required /></label>
+        {kind === "Recorrente" && <>
+          <label className="dashboard-field"><span>Valor do contrato</span><div className="money-input"><b>R$</b><input value={contractValue} onChange={(event) => setContractValue(event.target.value.replace(/[^\d,.]/g, ""))} onBlur={() => setContractValue(formatMoneyInput(contractValue))} inputMode="decimal" placeholder="0,00" required /></div></label>
+          <label className="dashboard-field"><span>Quantidade de vídeos</span><input type="number" min="1" value={videoQuantity} onChange={(event) => setVideoQuantity(event.target.value)} inputMode="numeric" placeholder="Ex.: 8" required /></label>
+          <label className="dashboard-field"><span>Dia do pagamento</span><input type="number" min="1" max="31" value={paymentDay} onChange={(event) => setPaymentDay(event.target.value)} inputMode="numeric" placeholder="Ex.: 10" required /></label>
+        </>}
         <label className="contract-upload full"><input type="file" accept=".pdf,.doc,.docx" onChange={(event) => setContract(event.target.files?.[0] || null)} /><Icon><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></Icon><span><strong>{contract ? contract.name : "Enviar contrato"}</strong><small>PDF, DOC ou DOCX · até 10 MB</small></span></label>
-        <div className="client-form-actions full"><button className="dashboard-button secondary" type="button" onClick={onClose}>Cancelar</button><button className="dashboard-button primary" type="submit">{client ? "Salvar alterações" : "Cadastrar cliente"} <span>↗</span></button></div>
+        {saveError && <p className="admin-error full" role="alert">{saveError}</p>}
+        <div className="client-form-actions full"><button className="dashboard-button secondary" type="button" onClick={onClose} disabled={saving}>Cancelar</button><button className="dashboard-button primary" type="submit" disabled={saving}>{saving ? "Salvando…" : client ? "Salvar alterações" : "Cadastrar cliente"} {!saving && <span>↗</span>}</button></div>
       </form>
     </section>
   </div>;
 }
 
 function ClientDetails({ client, onClose, onEdit }: { client: Client; onClose: () => void; onEdit: () => void }) {
-  return <div className="client-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="client-modal client-details" role="dialog" aria-modal="true"><header className="client-modal-header"><div><p className="dashboard-kicker">Detalhes do cliente</p><h2>{client.tradeName || client.name}</h2><p>{client.name}</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Fechar">×</button></header><div className="client-details-grid"><div><span>CPF/CNPJ</span><strong>{formatDocument(client.document)}</strong></div><div><span>Valor do contrato</span><strong>{formatMoney(client.contractValue)}</strong></div><div><span>Demanda mensal</span><strong>{client.videoQuantity || 0} vídeos</strong></div><div><span>Pagamento</span><strong>{formatPaymentDay(client)}</strong></div><div className="full"><span>Arquivo do contrato</span><strong>{client.contractName || "Nenhum arquivo anexado"}</strong></div></div><div className="client-details-actions"><button className="dashboard-button secondary" onClick={onClose}>Fechar</button><button className="dashboard-button primary" onClick={onEdit}>Editar cadastro</button></div></section></div>;
+  const recurring = isRecurringClient(client);
+  return <div className="client-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="client-modal client-details" role="dialog" aria-modal="true"><header className="client-modal-header"><div><p className="dashboard-kicker">Detalhes do cliente</p><h2>{client.tradeName || client.name}</h2><p>{client.name}</p></div><button className="modal-close" type="button" onClick={onClose} aria-label="Fechar">×</button></header><div className="client-details-grid"><div><span>CPF/CNPJ</span><strong>{formatDocument(client.document)}</strong></div><div><span>Valor do contrato</span><strong>{recurring && client.contractValue != null ? formatMoney(client.contractValue) : "—"}</strong></div><div><span>Demanda mensal</span><strong>{recurring && client.videoQuantity != null ? `${client.videoQuantity} vídeos` : "—"}</strong></div><div><span>Pagamento</span><strong>{recurring ? formatPaymentDay(client) : "—"}</strong></div><div className="full"><span>Arquivo do contrato</span><strong>{client.contractName || "Nenhum arquivo anexado"}</strong></div></div><div className="client-details-actions"><button className="dashboard-button secondary" onClick={onClose}>Fechar</button><button className="dashboard-button primary" onClick={onEdit}>Editar cadastro</button></div></section></div>;
 }
 
 function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const sessionCloud = cloudDataFromUser(session.user);
+  const sessionClients = normalizeClients(sessionCloud);
   const [activeArea, setActiveArea] = useState<"clients" | "portal" | "finance">("clients");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [clients, setClients] = useState<Client[]>(() => normalizeClients(sessionCloud));
-  const [cloudData, setCloudData] = useState<CloudData>(sessionCloud);
+  const [clients, setClients] = useState<Client[]>(() => sessionClients);
+  const [cloudData, setCloudData] = useState<CloudData>(() => ({ ...sessionCloud, clients: sessionClients }));
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"Todos" | Client["status"]>("Todos");
   const [kindFilter, setKindFilter] = useState<"Todos" | "Recorrente" | "Pontual">("Todos");
@@ -130,32 +189,47 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const activeClients = useMemo(() => clients.filter((client) => client.status !== "Inativo"), [clients]);
+  const activeRecurringClients = useMemo(() => activeClients.filter(isRecurringClient), [activeClients]);
   const visibleClients = useMemo(() => clients.filter((client) => {
     const matchesSearch = `${client.name} ${client.tradeName} ${client.document}`.toLowerCase().includes(search.toLowerCase());
     const normalizedStatus = client.status === "Inativo" ? "Inativo" : "Ativo";
     return matchesSearch && (statusFilter === "Todos" || normalizedStatus === statusFilter) && (kindFilter === "Todos" || (client.kind || "Recorrente") === kindFilter);
   }), [clients, search, statusFilter, kindFilter]);
-  const monthlyTotal = activeClients.reduce((sum, client) => sum + client.contractValue, 0);
-  const monthlyVideos = activeClients.reduce((sum, client) => sum + (client.videoQuantity || 0), 0);
+  const monthlyTotal = activeRecurringClients.reduce((sum, client) => sum + (Number(client.contractValue) || 0), 0);
+  const monthlyVideos = activeRecurringClients.reduce((sum, client) => sum + (Number(client.videoQuantity) || 0), 0);
+  const nextPaymentClient = [...activeRecurringClients]
+    .filter((client) => Number(getPaymentDay(client)) >= 1 && Number(getPaymentDay(client)) <= 31)
+    .sort((a, b) => Number(getPaymentDay(a)) - Number(getPaymentDay(b)))[0];
 
   useEffect(() => {
     void readCloudData(session.access_token).then((data) => {
-      setCloudData(data);
-      setClients(normalizeClients(data));
+      const normalizedClients = normalizeClients(data);
+      setCloudData({ ...data, clients: normalizedClients });
+      setClients(normalizedClients);
     }).catch((reason) => console.error("Falha ao carregar dados administrativos", reason));
   }, [session.access_token]);
 
-  function saveClient(client: Client) {
-    const exists = clients.some((item) => item.id === client.id);
-    const next = exists ? clients.map((item) => item.id === client.id ? client : item) : [client, ...clients];
-    setClients(next); void writeCloudSection(session.access_token, "clients", next); setModalOpen(false); setEditingClient(null);
+  async function saveClient(client: Client) {
+    const normalizedClient = normalizeClients({ clients: [client] })[0];
+    const exists = clients.some((item) => item.id === normalizedClient.id);
+    const next = exists ? clients.map((item) => item.id === normalizedClient.id ? normalizedClient : item) : [normalizedClient, ...clients];
+    await writeCloudSection(session.access_token, "clients", next);
+    setClients(next);
+    setCloudData((current) => ({ ...current, clients: next }));
+    setModalOpen(false);
+    setEditingClient(null);
   }
 
-  function toggleClientStatus(client: Client) {
+  async function toggleClientStatus(client: Client) {
     const status: Client["status"] = client.status === "Inativo" ? "Ativo" : "Inativo";
     const next = clients.map((item) => item.id === client.id ? { ...item, status } : item);
-    setClients(next);
-    void writeCloudSection(session.access_token, "clients", next);
+    try {
+      await writeCloudSection(session.access_token, "clients", next);
+      setClients(next);
+      setCloudData((current) => ({ ...current, clients: next }));
+    } catch (reason) {
+      window.alert(reason instanceof Error ? reason.message : "Não foi possível alterar o status do cliente.");
+    }
   }
 
   async function syncAllData() {
@@ -175,11 +249,11 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
       <button className="sidebar-link"><Icon><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1v.09h-4V21a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4h-.09v-4H3A1.7 1.7 0 0 0 4.6 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1v-.09h4V3a1.7 1.7 0 0 0 1.1 1.6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.6 1 .27.28.62.4 1 .4h.09v4H21c-.4 0-.73.13-1 .4-.27.28-.48.62-.6 1Z"/></Icon><span>Configurações</span></button>
     </nav><div className="sidebar-user"><span className="user-avatar">A</span><div><strong>Administrador</strong><small>{session.user.email}</small></div><button onClick={onSignOut} aria-label="Sair"><Icon><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></Icon></button></div></aside>
     {activeArea === "clients" ? <section className="dashboard-content"><header className="dashboard-topbar"><div><p className="dashboard-kicker">Área administrativa</p><h1>Clientes</h1><p>Gerencie os contratos e pagamentos da Form.</p></div><div className="dashboard-topbar-actions"><button className="dashboard-button secondary" onClick={syncAllData}>Sincronizar agora</button><button className="dashboard-button primary" onClick={() => setModalOpen(true)}><span className="plus">+</span> Novo cliente</button></div></header>
-      <div className="dashboard-stats"><article><span>Clientes ativos</span><strong>{String(activeClients.length).padStart(2, "0")}</strong><small>{clients.length - activeClients.length} inativos</small></article><article><span>Valor em contratos</span><strong>{formatMoney(monthlyTotal)}</strong><small>Contratos ativos</small></article><article><span>Vídeos mensais</span><strong>{String(monthlyVideos).padStart(2, "0")}</strong><small>Demanda ativa</small></article><article><span>Próximo pagamento</span><strong>{activeClients.length ? formatPaymentDay([...activeClients].sort((a,b) => Number(getPaymentDay(a)) - Number(getPaymentDay(b)))[0]) : "—"}</strong><small>Agenda financeira</small></article></div>
+      <div className="dashboard-stats"><article><span>Clientes ativos</span><strong>{String(activeClients.length).padStart(2, "0")}</strong><small>{clients.length - activeClients.length} inativos</small></article><article><span>Valor em contratos</span><strong>{formatMoney(monthlyTotal)}</strong><small>Contratos ativos</small></article><article><span>Vídeos mensais</span><strong>{String(monthlyVideos).padStart(2, "0")}</strong><small>Demanda ativa</small></article><article><span>Próximo pagamento</span><strong>{nextPaymentClient ? formatPaymentDay(nextPaymentClient) : "—"}</strong><small>Agenda financeira</small></article></div>
       <section className="clients-card"><div className="client-kind-tabs"><button className={kindFilter==="Todos"?"active":""} onClick={()=>setKindFilter("Todos")}>Todos <b>{clients.length}</b></button><button className={kindFilter==="Recorrente"?"active":""} onClick={()=>setKindFilter("Recorrente")}>Recorrentes <b>{clients.filter(c=>(c.kind||"Recorrente")==="Recorrente").length}</b></button><button className={kindFilter==="Pontual"?"active":""} onClick={()=>setKindFilter("Pontual")}>Pontuais <b>{clients.filter(c=>c.kind==="Pontual").length}</b></button></div><div className="clients-toolbar"><div><h2>Clientes</h2><span>{visibleClients.length} de {clients.length} {clients.length === 1 ? "cadastro" : "cadastros"}</span></div><div className="clients-toolbar-controls"><label className="client-status-filter"><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option>Todos</option><option>Ativo</option><option>Inativo</option></select></label><label className="client-search"><Icon><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></Icon><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente..." /></label></div></div>
-        {visibleClients.length ? <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Cliente</th><th>Tipo</th><th>CPF/CNPJ</th><th>Contrato</th><th>Demanda</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><div className="client-cell"><span className="client-monogram">{client.name.charAt(0)}</span><div><strong>{client.tradeName || client.name}</strong>{client.tradeName && <small>{client.name}</small>}</div></div></td><td><span className={`client-kind-badge ${(client.kind||"Recorrente").toLowerCase()}`}>{client.kind||"Recorrente"}</span></td><td>{formatDocument(client.document)}</td><td><div className="contract-cell"><strong>{formatMoney(client.contractValue)}</strong>{client.contractName && <small>{client.contractName}</small>}</div></td><td><strong>{client.videoQuantity || 0} vídeos</strong></td><td>{formatPaymentDay(client)}</td><td><span className={`status-pill ${client.status === "Inativo" ? "inactive" : ""}`}><i/> {client.status === "Inativo" ? "Inativo" : "Ativo"}</span></td><td><div className="row-actions"><button onClick={() => setSelectedClient(client)} aria-label={`Visualizar ${client.name}`} title="Visualizar"><Icon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon></button><button onClick={() => { setEditingClient(client); setModalOpen(true); }} aria-label={`Editar ${client.name}`} title="Editar"><Icon><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></Icon></button><button className="status-action" onClick={() => toggleClientStatus(client)} aria-label={`${client.status === "Inativo" ? "Ativar" : "Inativar"} ${client.name}`} title={client.status === "Inativo" ? "Ativar cliente" : "Inativar cliente"}><Icon><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></Icon></button></div></td></tr>)}</tbody></table></div> : <div className="clients-empty"><span><Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></Icon></span><h3>Nenhum cliente encontrado</h3><p>Ajuste a busca ou os filtros.</p></div>}
+        {visibleClients.length ? <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Cliente</th><th>Tipo</th><th>CPF/CNPJ</th><th>Contrato</th><th>Demanda</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead><tbody>{visibleClients.map((client) => <tr key={client.id}><td><div className="client-cell"><span className="client-monogram">{client.name.charAt(0)}</span><div><strong>{client.tradeName || client.name}</strong>{client.tradeName && <small>{client.name}</small>}</div></div></td><td><span className={`client-kind-badge ${(client.kind||"Recorrente").toLowerCase()}`}>{client.kind||"Recorrente"}</span></td><td>{formatDocument(client.document)}</td><td><div className="contract-cell"><strong>{isRecurringClient(client) && client.contractValue != null ? formatMoney(client.contractValue) : "—"}</strong>{client.contractName && <small>{client.contractName}</small>}</div></td><td><strong>{isRecurringClient(client) && client.videoQuantity != null ? `${client.videoQuantity} vídeos` : "—"}</strong></td><td>{isRecurringClient(client) ? formatPaymentDay(client) : "—"}</td><td><span className={`status-pill ${client.status === "Inativo" ? "inactive" : ""}`}><i/> {client.status === "Inativo" ? "Inativo" : "Ativo"}</span></td><td><div className="row-actions"><button onClick={() => setSelectedClient(client)} aria-label={`Visualizar ${client.name}`} title="Visualizar"><Icon><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></Icon></button><button onClick={() => { setEditingClient(client); setModalOpen(true); }} aria-label={`Editar ${client.name}`} title="Editar"><Icon><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></Icon></button><button className="status-action" onClick={() => toggleClientStatus(client)} aria-label={`${client.status === "Inativo" ? "Ativar" : "Inativar"} ${client.name}`} title={client.status === "Inativo" ? "Ativar cliente" : "Inativar cliente"}><Icon><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></Icon></button></div></td></tr>)}</tbody></table></div> : <div className="clients-empty"><span><Icon><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></Icon></span><h3>Nenhum cliente encontrado</h3><p>Ajuste a busca ou os filtros.</p></div>}
       </section>
-    </section> : activeArea === "portal" ? <section className="dashboard-content"><PortalAdmin accessToken={session.access_token}/></section> : <section className="dashboard-content finance-host"><FinanceDashboard accessToken={session.access_token} initialCloudData={cloudData} /></section>}
+    </section> : activeArea === "portal" ? <section className="dashboard-content"><PortalAdmin accessToken={session.access_token}/></section> : <section className="dashboard-content finance-host"><FinanceDashboard accessToken={session.access_token} initialCloudData={cloudData} onCloudDataChange={sections=>setCloudData(current=>({...current,...sections}))} /></section>}
     {activeArea === "clients" && modalOpen && <ClientModal client={editingClient || undefined} onClose={() => { setModalOpen(false); setEditingClient(null); }} onSave={saveClient} />}
     {activeArea === "clients" && selectedClient && <ClientDetails client={selectedClient} onClose={() => setSelectedClient(null)} onEdit={() => { setEditingClient(selectedClient); setSelectedClient(null); setModalOpen(true); }} />}
   </main>;
@@ -187,27 +261,51 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
 
 export default function AdminPlaceholder() {
   const [email, setEmail] = useState("admin@formcompany.com"); const [password, setPassword] = useState(""); const [showPassword, setShowPassword] = useState(false); const [isLoading, setIsLoading] = useState(false); const [error, setError] = useState("");
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null>(() => getAdminSession());
+  const oversizedTokenRefreshAttempted = useRef(false);
   useEffect(() => { document.title = "Área administrativa — Form Company"; }, []);
   useEffect(() => {
-    if (!session?.refresh_token || session.access_token.length < 8000) return;
+    if (!session) return;
     let active = true;
-    void fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-      headers: { apikey: supabaseKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: session.refresh_token }),
-    }).then(async (response) => {
-      const refreshed = await response.json() as Session & { error_description?: string; message?: string };
-      if (!response.ok) throw new Error(refreshed.error_description || refreshed.message || "Não foi possível renovar a sessão.");
-      if (active) setSession(refreshed);
-    }).catch((reason) => {
-      console.error("Falha ao renovar a sessão administrativa", reason);
+    const signOutAtDeadline = () => {
+      saveAdminSession(null);
       if (active) setSession(null);
-    });
-    return () => { active = false; };
-  }, [session]);
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); if (!supabaseUrl || !supabaseKey) { setError("A conexão com o sistema ainda não foi configurada."); return; } setIsLoading(true); try { const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: supabaseKey, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const data = await response.json() as Session & { error_description?: string; message?: string }; if (!response.ok) throw new Error(data.error_description || data.message || "Não foi possível entrar."); setSession(data); setPassword(""); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Não foi possível entrar. Tente novamente."); } finally { setIsLoading(false); } }
-  function signOut() { setSession(null); }
+    };
+    const remaining = session.persistent_until - Date.now();
+    if (remaining <= 0) {
+      signOutAtDeadline();
+      return;
+    }
+    const expiryTimer = window.setTimeout(signOutAtDeadline, remaining);
+    if (!session.refresh_token) return () => { active = false; window.clearTimeout(expiryTimer); };
+    const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+    const shouldRefreshOversizedToken = session.access_token.length >= 8000 && !oversizedTokenRefreshAttempted.current;
+    if (!shouldRefreshOversizedToken && !expiresAt) return () => { active = false; window.clearTimeout(expiryTimer); };
+    let retryTimer: number | undefined;
+    const refresh = async () => {
+      if (shouldRefreshOversizedToken) oversizedTokenRefreshAttempted.current = true;
+      try {
+        const refreshed = await refreshAdminSession(session.refresh_token!, session.persistent_until);
+        if (active) {
+          saveAdminSession(refreshed);
+          setSession(refreshed);
+        }
+      } catch (reason) {
+        console.error("Falha ao renovar a sessão administrativa", reason);
+        if (!active) return;
+        if (session.persistent_until <= Date.now()) {
+          signOutAtDeadline();
+          return;
+        }
+        retryTimer = window.setTimeout(() => void refresh(), 30_000);
+      }
+    };
+    const delay = shouldRefreshOversizedToken ? 0 : Math.max(0, expiresAt! - Date.now() - 60_000);
+    const timer = window.setTimeout(() => void refresh(), Math.min(delay, 2_147_483_647));
+    return () => { active = false; window.clearTimeout(expiryTimer); window.clearTimeout(timer); if (retryTimer !== undefined) window.clearTimeout(retryTimer); };
+  }, [session?.access_token, session?.expires_at, session?.persistent_until, session?.refresh_token]);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); if (!supabaseUrl || !supabaseKey) { setError("A conexão com o sistema ainda não foi configurada."); return; } setIsLoading(true); try { const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: supabaseKey, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }); const data = await response.json() as Omit<Session, "persistent_until"> & { error_description?: string; message?: string }; if (!response.ok) throw new Error(data.error_description || data.message || "Não foi possível entrar."); const persistentSession: Session = { ...data, persistent_until: Date.now() + adminSessionDuration }; oversizedTokenRefreshAttempted.current = false; saveAdminSession(persistentSession); setSession(persistentSession); setPassword(""); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Não foi possível entrar. Tente novamente."); } finally { setIsLoading(false); } }
+  function signOut() { oversizedTokenRefreshAttempted.current = false; saveAdminSession(null); setSession(null); }
   if (session) return <Dashboard session={session} onSignOut={signOut} />;
   return <main className="admin-page"><div className="admin-frame"><section className="admin-panel"><FormMark /><form className="admin-form" onSubmit={handleSubmit}><div><p className="admin-eyebrow">Área administrativa</p><h1>Bem-vindo de volta.</h1><p className="admin-copy">Entre com seu e-mail para acessar a Form.</p></div><label className="admin-field"><span>E-mail</span><input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" required /></label><label className="admin-field"><span>Senha</span><span className="admin-password-wrap"><input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Digite sua senha" required /><button type="button" className="admin-password-toggle" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Ocultar" : "Mostrar"}</button></span></label>{error && <p className="admin-error" role="alert">{error}</p>}<button className="admin-primary-button" type="submit" disabled={isLoading}><span>{isLoading ? "Entrando..." : "Entrar"}</span><span>↗</span></button></form><p className="admin-footer-note">Form Company® · Acesso restrito</p></section><aside className="admin-art-copy" aria-hidden="true"><span>Forma.</span><span>Movimento.</span><span>Resultado.</span></aside></div></main>;
 }

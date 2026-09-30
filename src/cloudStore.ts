@@ -32,14 +32,19 @@ export async function readCloudData(accessToken: string): Promise<CloudData> {
 
 let writeQueue: Promise<void> = Promise.resolve();
 
-export function writeCloudSection(accessToken: string, section: keyof CloudData, value: unknown[]) {
+export function writeCloudSections(accessToken: string, sections: Partial<Record<keyof CloudData, unknown[]>>) {
+  const rows = Object.entries(sections).map(([section, value]) => ({ section, value }));
   writeQueue = writeQueue.catch(() => undefined).then(async () => {
     const response = await fetch(`${supabaseUrl}/rest/v1/app_data?on_conflict=section`, {
       method: "POST",
       headers: { ...headers(accessToken), Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify([{ section, value }]),
+      body: JSON.stringify(rows),
     });
     if (!response.ok) throw new Error("Não foi possível salvar os dados na nuvem.");
   });
   return writeQueue;
+}
+
+export function writeCloudSection(accessToken: string, section: keyof CloudData, value: unknown[]) {
+  return writeCloudSections(accessToken, { [section]: value });
 }
