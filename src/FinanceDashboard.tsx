@@ -26,6 +26,12 @@ const addMonths = (date: string, months: number) => {
   const next = new Date(Date.UTC(year, month - 1 + months, Math.min(day, 28)));
   return next.toISOString().slice(0, 10);
 };
+const splitMoney = (total: number, parts: number) => {
+  const totalCents = Math.round(total * 100);
+  const baseCents = Math.floor(totalCents / parts);
+  const remainder = totalCents - baseCents * parts;
+  return Array.from({ length: parts }, (_, index) => (baseCents + (index < remainder ? 1 : 0)) / 100);
+};
 const expandInstallments = (entry: Entry) => {
   if (entry.recurring) return Array.from({ length: entry.recurrenceMonths || 12 }, (_, index) => ({
     ...entry,
@@ -36,11 +42,14 @@ const expandInstallments = (entry: Entry) => {
     paymentDate: index === 0 ? entry.paymentDate : undefined,
     balanceApplied: index === 0 ? entry.balanceApplied : false,
   }));
-  return entry.installments <= 1 ? [entry] : Array.from({ length: entry.installments }, (_, index) => ({
+  if (entry.installments <= 1) return [entry];
+  const installmentAmounts = splitMoney(entry.amount, entry.installments);
+  return installmentAmounts.map((installmentAmount, index) => ({
     ...entry,
     id: crypto.randomUUID(),
     description: `${entry.description} (${index + 1}/${entry.installments})`,
-    amount: entry.amount / entry.installments,
+    amount: installmentAmount,
+    competenceDate: addMonths(entry.competenceDate, index),
     dueDate: addMonths(entry.dueDate, index),
   }));
 };
@@ -90,6 +99,7 @@ function EntryModal({ accounts, categories = [], initialKind, onClose, onSave }:
   const categoryOptions=Array.from(new Set([...defaultCategories,...categories])).sort((a,b)=>a.localeCompare(b,"pt-BR"));
   categories=categoryOptions;
   const selectedAccount=accounts.find(account=>account.id===accountId);
+  const parsedAmount=parseMoney(amount); const parsedInstallments=Math.max(1,Number(installments)||1); const installmentPreview=!recurring&&Number.isFinite(parsedAmount)&&parsedAmount>0&&parsedInstallments>1?splitMoney(parsedAmount,parsedInstallments):[];
   useEffect(()=>{setAccountId(availableAccounts[0]?.id||"")},[paymentMethod]);
   useEffect(()=>{if(kind==="income"||paymentMethod!=="Cartão"||!selectedAccount?.dueDay)return;const [year,month]=competenceDate.split("-").map(Number);const base=new Date(Date.UTC(year,month-1+(cardInvoiceMonth==="next"?1:0),Math.min(selectedAccount.dueDay,28)));setDueDate(base.toISOString().slice(0,10))},[kind,paymentMethod,accountId,competenceDate,cardInvoiceMonth]);
   function submit(event:FormEvent){event.preventDefault();const isIncome=kind==="income";const incomeReceived=isIncome&&status==="Recebido";onSave({id:crypto.randomUUID(),kind,bankDescription,description,paymentMethod:isIncome?"PIX":paymentMethod,amount:parseMoney(amount),category,accountId,competenceDate,dueDate:isIncome?competenceDate:dueDate,paymentDate:incomeReceived?competenceDate:undefined,status,recurring:!isIncome&&recurring,recurrenceMonths:!isIncome&&recurring?Number(recurrenceMonths):undefined,installments:isIncome||recurring?1:Number(installments),isCreditCard:!isIncome&&paymentMethod==="Cartão",attachment:attachment?.name})}
@@ -99,7 +109,7 @@ function EntryModal({ accounts, categories = [], initialKind, onClose, onSave }:
     <div className="finance-form-grid">
       <label className="full"><span>Descrição do banco</span><input value={bankDescription} onChange={event=>setBankDescription(event.target.value)} placeholder="Como aparece no extrato" required/></label>
       <label className="full"><span>Descrição interna</span><input value={description} onChange={event=>setDescription(event.target.value)} placeholder="Descrição organizada por você" required/></label>
-      <label><span>Valor</span><div className="finance-money"><b>R$</b><input value={amount} onChange={event=>setAmount(event.target.value.replace(/[^\d,.]/g,""))} onBlur={()=>setAmount(inputMoney(amount))} required/></div></label>
+      <label><span>{kind==="expense"?"Valor total":"Valor"}</span><div className="finance-money"><b>R$</b><input value={amount} onChange={event=>setAmount(event.target.value.replace(/[^\d,.]/g,""))} onBlur={()=>setAmount(inputMoney(amount))} required/></div></label>
       <label><span>Categoria</span><select value={customCategory?"__new__":category} onChange={event=>{if(event.target.value==="__new__"){setCustomCategory(true);setCategory("")}else{setCustomCategory(false);setCategory(event.target.value)}}} required><option value="">Selecione</option>{categoryOptions.map(item=><option value={item} key={item}>{item}</option>)}<option value="__new__">+ Cadastrar nova categoria</option></select></label>
       {customCategory&&<label className="full"><span>Nome da nova categoria</span><input value={category} onChange={event=>setCategory(event.target.value.toUpperCase())} placeholder="Digite a nova categoria" autoFocus required/></label>}
       {kind==="expense"&&<label><span>Tipo de pagamento</span><select value={paymentMethod} onChange={event=>setPaymentMethod(event.target.value as "PIX"|"Cartão")}><option>PIX</option><option>Cartão</option></select></label>}
@@ -114,6 +124,8 @@ function EntryModal({ accounts, categories = [], initialKind, onClose, onSave }:
       {kind==="expense"&&recurring&&<label><span>Repetir por quantos meses?</span><input type="number" min="2" max="60" value={recurrenceMonths} onChange={event=>setRecurrenceMonths(event.target.value)} required/></label>}
       <label className="finance-upload full"><input type="file" onChange={event=>setAttachment(event.target.files?.[0]||null)}/><span>{attachment?.name||"Anexar boleto, nota ou comprovante"}</span></label>
     </div>
+    {kind==="expense"&&!recurring&&installmentPreview.length>0&&<p className="finance-rule-note">Valor total de {money(parsedAmount)} dividido em {parsedInstallments} parcelas: {installmentPreview.every(value=>value===installmentPreview[0])?`${parsedInstallments}× de ${money(installmentPreview[0])}`:`parcelas entre ${money(Math.min(...installmentPreview))} e ${money(Math.max(...installmentPreview))}`}.</p>}
+    {kind==="expense"&&recurring&&Number.isFinite(parsedAmount)&&parsedAmount>0&&<p className="finance-rule-note">Recorrência mensal: {Number(recurrenceMonths)||0}× de {money(parsedAmount)} (o valor integral se repete todo mês).</p>}
     {kind==="expense"&&paymentMethod==="Cartão"&&<p className="finance-rule-note">Escolha a fatura deste mês ou a próxima. {recurring?"A despesa será repetida com o valor integral nas faturas seguintes.":"As parcelas serão projetadas mensalmente usando o vencimento escolhido."}</p>}
     <div className="finance-modal-actions"><button type="button" className="finance-btn ghost" onClick={onClose}>Cancelar</button><button className="finance-btn red">Salvar lançamento</button></div>
   </form></div>;
